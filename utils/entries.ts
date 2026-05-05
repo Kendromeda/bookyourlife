@@ -19,6 +19,10 @@ export type Question = {
   asked_at: string;
 };
 
+type PendingQuestion = {
+  status: 'pending';
+};
+
 export type EntryListPage = {
   items: Entry[];
   next_cursor: string | null;
@@ -43,9 +47,10 @@ export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   return data;
 }
 
-export async function fetchTodayQuestion(): Promise<Question> {
-  const { data } = await api.get<Question>('/questions/today');
-  return data;
+export async function fetchTodayQuestion(): Promise<Question | null> {
+  const { data } = await api.get<Question | PendingQuestion>('/questions/today');
+  if ((data as PendingQuestion).status === 'pending') return null;
+  return data as Question;
 }
 
 export async function skipQuestion(id: string): Promise<void> {

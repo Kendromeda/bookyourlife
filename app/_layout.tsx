@@ -6,7 +6,6 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import 'react-native-reanimated';
 
@@ -50,24 +49,30 @@ function usePushLifecycle() {
 
   useEffect(() => {
     if (!isSignedIn) return;
+    if (Constants.appOwnership === 'expo') return;
     void ensurePushRegistered().catch(() => {});
   }, [isSignedIn]);
 
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const deepLink = response.notification.request.content.data?.deep_link as string | undefined;
-      if (deepLink) {
-        try {
-          const parsed = Linking.parse(deepLink);
-          if (parsed.path?.startsWith('question/')) {
-            router.push('/(tabs)');
+    if (Constants.appOwnership === 'expo') return;
+    let cleanup: (() => void) | undefined;
+    void import('expo-notifications').then((Notifications) => {
+      const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const deepLink = response.notification.request.content.data?.deep_link as string | undefined;
+        if (deepLink) {
+          try {
+            const parsed = Linking.parse(deepLink);
+            if (parsed.path?.startsWith('question/')) {
+              router.push('/(tabs)');
+            }
+          } catch {
+            // ignore malformed
           }
-        } catch {
-          // ignore malformed
         }
-      }
+      });
+      cleanup = () => sub.remove();
     });
-    return () => sub.remove();
+    return () => cleanup?.();
   }, [router]);
 }
 

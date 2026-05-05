@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import desc, select
@@ -54,7 +54,7 @@ async def create_entry(
         user_id=user_id,
         body=body,
         question_id=question_id,
-        written_at=written_at or datetime.now(tz=timezone.utc),
+        written_at=written_at or datetime.now(tz=UTC),
     )
     session.add(entry)
     await session.flush()
@@ -63,8 +63,7 @@ async def create_entry(
         session.add(EntryPhoto(entry_id=entry.id, storage_key=key, position=index))
 
     await session.commit()
-    await session.refresh(entry)
-    return entry
+    return await get_entry(session, user_id=user_id, entry_id=entry.id)
 
 
 async def update_entry_body(

@@ -8,7 +8,7 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    firebase_uid: str
+    clerk_id: str
     email: str | None
     display_name: str | None
     face_photo_url: str | None

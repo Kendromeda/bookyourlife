@@ -8,7 +8,7 @@ meledak di scale.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -18,7 +18,7 @@ from app.db import session_scope
 from app.models.user import User
 from app.services.question_generator import generate_question_for_user
 from app.tasks.celery_app import celery_app
-from app.tasks.notification import send_fcm
+from app.tasks.notification import send_push
 
 logger = structlog.get_logger()
 
@@ -34,7 +34,7 @@ def fan_out_daily_questions() -> int:
 
 
 async def _fan_out_async() -> int:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     async with session_scope() as session:
         stmt = select(User.id).where(User.notif_hour == now.hour)
         user_ids = list((await session.execute(stmt)).scalars().all())
@@ -55,7 +55,7 @@ async def _generate_for_user_async(user_id: UUID) -> str | None:
     async with session_scope() as session:
         question = await generate_question_for_user(session, user_id=user_id)
 
-    send_fcm.delay(
+    send_push.delay(
         str(user_id),
         title="Pertanyaan hari ini",
         body=question.text,

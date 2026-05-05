@@ -25,7 +25,7 @@ export default function TodayScreen() {
   const router = useRouter();
   const qc = useQueryClient();
 
-  const todayQuery = useQuery<Question>({
+  const todayQuery = useQuery<Question | null>({
     queryKey: ['questions', 'today'],
     queryFn: fetchTodayQuestion,
     staleTime: 5 * 60_000,
