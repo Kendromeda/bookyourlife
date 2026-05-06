@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { fetchMe, Me, updateMe } from '@/utils/users';
+import { fetchMe, LANGUAGES, LanguageCode, Me, updateMe } from '@/utils/users';
 
 const NOTIF_HOURS = [6, 7, 8, 9, 10, 12, 18, 20, 21];
 
@@ -51,6 +51,13 @@ export default function MoreScreen() {
   const updateNotif = useMutation({
     mutationFn: (hour: number) => updateMe({ notif_hour: hour }),
     onSuccess: (data) => qc.setQueryData(['me'], data),
+  });
+  const updateLanguage = useMutation({
+    mutationFn: (preferred_language: LanguageCode) => updateMe({ preferred_language }),
+    onSuccess: (data) => {
+      qc.setQueryData(['me'], data);
+      qc.invalidateQueries({ queryKey: ['questions', 'today'] });
+    },
   });
 
   const me = meQuery.data;
@@ -111,6 +118,37 @@ export default function MoreScreen() {
                     >
                       <Text style={[styles.hourLabel, { color: active ? '#fff' : c.text }]}>
                         {h.toString().padStart(2, '0')}:00
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+            <Row
+              icon="globe"
+              label="Language"
+              detail={
+                LANGUAGES.find((item) => item.code === me?.preferred_language)?.label ?? 'English'
+              }
+            />
+            {me && (
+              <View style={styles.hourGrid}>
+                {LANGUAGES.map((item) => {
+                  const active = me.preferred_language === item.code;
+                  return (
+                    <TouchableOpacity
+                      key={item.code}
+                      onPress={() => updateLanguage.mutate(item.code)}
+                      style={[
+                        styles.hourChip,
+                        {
+                          backgroundColor: active ? c.accent : c.surface,
+                          borderColor: active ? c.accent : c.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.hourLabel, { color: active ? '#fff' : c.text }]}>
+                        {item.label}
                       </Text>
                     </TouchableOpacity>
                   );

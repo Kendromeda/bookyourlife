@@ -63,6 +63,11 @@ export type PresignedUpload = {
   expires_in_seconds: number;
 };
 
+export type DirectUpload = {
+  storage_key: string;
+  public_url: string;
+};
+
 export async function requestPhotoUpload(
   contentType: string,
   purpose: 'entry-photo' | 'face-photo' = 'entry-photo',
@@ -86,4 +91,24 @@ export async function uploadPhotoToR2(
     body: blob,
   });
   if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+}
+
+export async function uploadPhoto(
+  fileUri: string,
+  contentType: string,
+  purpose: 'entry-photo' | 'face-photo' = 'entry-photo',
+): Promise<DirectUpload> {
+  const form = new FormData();
+  const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+  form.append('purpose', purpose);
+  form.append('file', {
+    uri: fileUri,
+    name: `${purpose}.${extension}`,
+    type: contentType,
+  } as any);
+
+  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
 }

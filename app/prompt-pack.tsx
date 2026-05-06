@@ -1,18 +1,21 @@
+import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
-import { PROMPT_PACKS } from '@/constants/prompts';
+import { getPromptPacks } from '@/constants/prompts';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { fetchMe, Me } from '@/utils/users';
 
 export default function PromptPackScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const pack = PROMPT_PACKS.find((p) => p.id === id);
+  const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
+  const pack = getPromptPacks(meQuery.data?.preferred_language).find((p) => p.id === id);
 
   if (!pack) {
     return (

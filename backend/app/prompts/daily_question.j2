@@ -5,6 +5,7 @@
    - top_themes: tema yang paling sering muncul di 30 hari terakhir
    - recent_questions: list pertanyaan 30 hari terakhir (no-repeat)
    - mode: "follow_up" | "fresh"
+   - language_instruction: output language rule
 #}
 {% if mode == "follow_up" -%}
 {{ user_name }} sudah bercerita tentang:
@@ -15,7 +16,7 @@ Tema yang sering muncul: {{ top_themes }}
 Buat satu pertanyaan follow-up yang:
 - Mereferensikan detail spesifik dari cerita di atas
 - Tone hangat dan penasaran (seperti teman dekat)
-- Maksimal 25 kata, bahasa Indonesia kasual
+- {{ language_instruction }}
 - TIDAK boleh sama atau mirip dengan pertanyaan ini: {{ recent_questions }}
 {% else -%}
 Hari ini hari {{ today_label }}. {{ user_name }} sudah bercerita banyak akhir-akhir ini tentang {{ top_themes }}.
@@ -23,7 +24,7 @@ Hari ini hari {{ today_label }}. {{ user_name }} sudah bercerita banyak akhir-ak
 Buat satu pertanyaan baru yang:
 - Bukan follow-up langsung, tapi tetap personal dan kontekstual
 - Tone hangat dan penasaran
-- Maksimal 25 kata, bahasa Indonesia kasual
+- {{ language_instruction }}
 - TIDAK boleh sama atau mirip dengan pertanyaan ini: {{ recent_questions }}
 {%- endif %}
 

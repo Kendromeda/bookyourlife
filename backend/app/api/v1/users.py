@@ -22,6 +22,8 @@ async def update_me(payload: UserUpsertIn, user: CurrentUser, session: SessionDe
         user.notif_hour = payload.notif_hour
     if payload.timezone is not None:
         user.timezone = payload.timezone
+    if payload.preferred_language is not None:
+        user.preferred_language = payload.preferred_language
     await session.commit()
     await session.refresh(user)
     return UserOut.model_validate(user)

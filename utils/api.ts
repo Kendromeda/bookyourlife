@@ -2,8 +2,8 @@ import axios, { AxiosError, AxiosInstance } from 'axios';
 import Constants from 'expo-constants';
 
 const baseURL =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
   process.env.EXPO_PUBLIC_API_BASE_URL ??
+  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
   'http://10.0.2.2:8000';
 
 export const api: AxiosInstance = axios.create({

@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.exc import NoResultFound
 
@@ -11,6 +12,7 @@ from app.services.storage.r2 import get_r2_storage
 from app.tasks.index_entry import index_entry as index_entry_task
 
 router = APIRouter()
+logger = structlog.get_logger()
 
 
 @router.get("", response_model=EntryListOut)
@@ -44,8 +46,10 @@ async def create_entry(
         photo_storage_keys=payload.photo_storage_keys,
         written_at=payload.written_at,
     )
-    # Schedule async embedding (Phase 2 picks up; stub aman dipanggil sekarang).
-    index_entry_task.delay(str(entry.id))
+    try:
+        index_entry_task.delay(str(entry.id))
+    except Exception as exc:
+        logger.warning("index_entry enqueue failed", entry_id=str(entry.id), error=str(exc))
     return _to_out(entry)
 
 
@@ -78,7 +82,7 @@ async def delete_entry(
 
 
 def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
-    storage = get_r2_storage()
+    storage = get_r2_storage() if entry.photos else None
     return EntryOut(
         id=entry.id,
         user_id=entry.user_id,
@@ -91,7 +95,7 @@ def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
         photos=[
             {  # type: ignore[list-item]
                 "id": p.id,
-                "storage_key": storage.public_url(p.storage_key),
+                "storage_key": storage.public_url(p.storage_key) if storage else p.storage_key,
                 "position": p.position,
             }
             for p in (entry.photos or [])

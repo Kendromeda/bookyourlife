@@ -48,7 +48,7 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:8000",
+      "apiBaseUrl": "http://167.99.67.153:8000",
       "clerkPublishableKey": "pk_test_bWF4aW11bS1idWNrLTY2LmNsZXJrLmFjY291bnRzLmRldiQ"
     }
   }

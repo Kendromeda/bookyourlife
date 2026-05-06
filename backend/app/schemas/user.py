@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -14,6 +15,7 @@ class UserOut(BaseModel):
     face_photo_url: str | None
     notif_hour: int
     timezone: str
+    preferred_language: Literal["en", "id"]
     subscription_tier: str
     created_at: datetime
     updated_at: datetime
@@ -24,6 +26,7 @@ class UserUpsertIn(BaseModel):
     face_photo_url: str | None = None
     notif_hour: int | None = None
     timezone: str | None = None
+    preferred_language: Literal["en", "id"] | None = None
 
 
 class FcmTokenIn(BaseModel):

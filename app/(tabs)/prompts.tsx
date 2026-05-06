@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -5,12 +6,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { PROMPT_PACKS, RECOMMENDED } from '@/constants/prompts';
+import { getPromptPacks, getRecommended } from '@/constants/prompts';
+import { fetchMe, Me } from '@/utils/users';
 
 export default function PromptsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
+  const language = meQuery.data?.preferred_language;
+  const promptPacks = getPromptPacks(language);
+  const recommended = getRecommended(language);
 
   const openPrompt = (text: string) => {
     router.push({ pathname: '/modal', params: { questionText: text } });
@@ -28,7 +34,7 @@ export default function PromptsScreen() {
           contentContainerStyle={{ paddingRight: Spacing.lg }}
           style={{ marginHorizontal: -Spacing.lg, paddingLeft: Spacing.lg }}
         >
-          {RECOMMENDED.map((p, i) => (
+          {recommended.map((p, i) => (
             <TouchableOpacity
               key={i}
               style={[styles.heroCard, { backgroundColor: c.accent }]}
@@ -45,7 +51,7 @@ export default function PromptsScreen() {
         </ScrollView>
 
         <Text style={[styles.section, { color: c.text, marginTop: Spacing.xl }]}>Prompt Packs</Text>
-        {PROMPT_PACKS.map((pack) => (
+        {promptPacks.map((pack) => (
           <TouchableOpacity
             key={pack.id}
             style={[styles.packRow, { backgroundColor: c.surface, borderColor: c.border }]}

@@ -8,8 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { requestPhotoUpload, uploadPhotoToR2 } from '@/utils/entries';
-import { updateMe } from '@/utils/users';
+import { uploadPhoto } from '@/utils/entries';
+import { LANGUAGES, LanguageCode, updateMe } from '@/utils/users';
 
 export default function OnboardingScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -17,6 +17,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { user } = useUser();
   const [displayName, setDisplayName] = useState(user?.fullName ?? '');
+  const [language, setLanguage] = useState<LanguageCode>('en');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoKey, setPhotoKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +39,8 @@ export default function OnboardingScreen() {
     setError(null);
     setPhotoUri(asset.uri);
     try {
-      const presigned = await requestPhotoUpload('image/jpeg', 'face-photo');
-      await uploadPhotoToR2(presigned.upload_url, asset.uri, 'image/jpeg');
-      setPhotoKey(presigned.storage_key);
+      const uploaded = await uploadPhoto(asset.uri, asset.mimeType ?? 'image/jpeg', 'face-photo');
+      setPhotoKey(uploaded.storage_key);
     } catch (e: any) {
       setError(e?.message ?? 'Failed to upload photo');
       setPhotoUri(null);
@@ -52,6 +52,7 @@ export default function OnboardingScreen() {
       await updateMe({
         display_name: displayName.trim() || undefined,
         face_photo_url: photoKey ?? undefined,
+        preferred_language: language,
       });
     },
     onSuccess: () => router.replace('/(tabs)'),
@@ -85,6 +86,30 @@ export default function OnboardingScreen() {
           onChangeText={setDisplayName}
         />
 
+        <Text style={[styles.fieldLabel, { color: c.text }]}>Language</Text>
+        <View style={styles.languageRow}>
+          {LANGUAGES.map((item) => {
+            const active = language === item.code;
+            return (
+              <TouchableOpacity
+                key={item.code}
+                onPress={() => setLanguage(item.code)}
+                style={[
+                  styles.languageChip,
+                  {
+                    backgroundColor: active ? c.accent : c.surface,
+                    borderColor: active ? c.accent : c.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.languageLabel, { color: active ? '#fff' : c.text }]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {error && <Text style={[styles.error, { color: c.danger }]}>{error}</Text>}
 
         <TouchableOpacity
@@ -112,6 +137,16 @@ const styles = StyleSheet.create({
   photo: { width: '100%', height: '100%' },
   photoLabel: { fontSize: 14, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: 16, marginBottom: Spacing.md },
+  fieldLabel: { fontSize: 14, fontWeight: '600', marginBottom: Spacing.sm },
+  languageRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
+  languageChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Radii.md,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  languageLabel: { fontSize: 14, fontWeight: '600' },
   error: { marginBottom: Spacing.md, fontSize: 14 },
   primary: { borderRadius: Radii.md, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
   primaryLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },

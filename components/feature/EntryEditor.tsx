@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createEntry, requestPhotoUpload, uploadPhotoToR2 } from '@/utils/entries';
+import { createEntry, uploadPhoto } from '@/utils/entries';
 
 const MAX_PHOTOS = 5;
 
@@ -41,11 +41,10 @@ export function EntryEditor({ questionId, questionText, onDone }: Props) {
     const idx = photos.length;
     setPhotos((p) => [...p, { uri: asset.uri, storage_key: null, uploading: true }]);
     try {
-      const presigned = await requestPhotoUpload('image/jpeg', 'entry-photo');
-      await uploadPhotoToR2(presigned.upload_url, asset.uri, 'image/jpeg');
+      const uploaded = await uploadPhoto(asset.uri, asset.mimeType ?? 'image/jpeg', 'entry-photo');
       setPhotos((p) => {
         const next = [...p];
-        next[idx] = { uri: asset.uri, storage_key: presigned.storage_key, uploading: false };
+        next[idx] = { uri: asset.uri, storage_key: uploaded.storage_key, uploading: false };
         return next;
       });
     } catch (e: any) {

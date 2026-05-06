@@ -8,8 +8,16 @@ export type Me = {
   face_photo_url: string | null;
   notif_hour: number;
   timezone: string;
+  preferred_language: LanguageCode;
   subscription_tier: 'free' | 'premium';
 };
+
+export type LanguageCode = 'en' | 'id';
+
+export const LANGUAGES: { code: LanguageCode; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'id', label: 'Bahasa Indonesia' },
+];
 
 export async function fetchMe(): Promise<Me> {
   const { data } = await api.get<Me>('/users/me');
@@ -21,6 +29,7 @@ export type UpdateMeInput = Partial<{
   face_photo_url: string;
   notif_hour: number;
   timezone: string;
+  preferred_language: LanguageCode;
 }>;
 
 export async function updateMe(input: UpdateMeInput): Promise<Me> {

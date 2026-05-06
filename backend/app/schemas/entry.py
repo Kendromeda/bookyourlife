@@ -46,3 +46,8 @@ class PresignedUploadOut(BaseModel):
     upload_url: str
     storage_key: str
     expires_in_seconds: int
+
+
+class DirectUploadOut(BaseModel):
+    storage_key: str
+    public_url: str

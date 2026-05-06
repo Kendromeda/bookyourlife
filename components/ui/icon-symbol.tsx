@@ -31,6 +31,7 @@ const MAPPING = {
   'paintbrush.fill': 'palette',
   'bell.fill': 'notifications',
   'doc.fill': 'description',
+  'globe': 'public',
   'wand.and.stars': 'auto-fix-high',
   'magnifyingglass': 'search',
 } as IconMapping;

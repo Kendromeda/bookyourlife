@@ -13,4 +13,5 @@ class User(UUIDMixin, TimestampMixin, Base):
     face_photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     notif_hour: Mapped[int] = mapped_column(Integer, default=9, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jakarta", nullable=False)
+    preferred_language: Mapped[str] = mapped_column(String(8), default="en", nullable=False)
     subscription_tier: Mapped[str] = mapped_column(String(16), default="free", nullable=False)

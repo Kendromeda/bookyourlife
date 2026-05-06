@@ -43,6 +43,27 @@ class R2Storage:
         )
         return url, storage_key
 
+    def upload_bytes(
+        self,
+        *,
+        key_prefix: str,
+        data: bytes,
+        content_type: str = "image/jpeg",
+    ) -> str:
+        extension = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+        }.get(content_type, "jpg")
+        storage_key = f"{key_prefix}/{uuid4().hex}.{extension}"
+        self._client.put_object(
+            Bucket=self._bucket,
+            Key=storage_key,
+            Body=data,
+            ContentType=content_type,
+        )
+        return storage_key
+
     def public_url(self, storage_key: str) -> str:
         return f"{self._public_base}/{storage_key}"
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.question import Question
+from app.models.user import User
 from app.services import questions as q_service
 from app.services.llm import OpenAIClient
 
@@ -22,6 +23,15 @@ _env = Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+FRESH_QUESTION_RATE = 0.30
+
+
+def _language_instruction(language: str) -> str:
+    return (
+        "Use casual Indonesian. Maximum 25 words."
+        if language == "id"
+        else "Use natural English. Maximum 25 words."
+    )
 
 
 async def generate_question_for_user(
@@ -33,13 +43,17 @@ async def generate_question_for_user(
     settings = get_settings()
     llm = llm or OpenAIClient()
 
+    user = await session.get(User, user_id)
+    preferred_language = user.preferred_language if user is not None else "en"
+    language_instruction = _language_instruction(preferred_language)
+
     recent_entries = await q_service.recent_entry_bodies(session, user_id=user_id, limit=10)
     recent_questions = await q_service.recent_question_texts(session, user_id=user_id, days=30)
 
     has_history = bool(recent_entries)
     mode = (
         "fresh"
-        if not has_history or random.random() < 0.30  # noqa: S311 (non-crypto, distribusi 70/30)
+        if not has_history or random.random() < FRESH_QUESTION_RATE  # noqa: S311
         else "follow_up"
     )
 
@@ -52,10 +66,11 @@ async def generate_question_for_user(
         recent_questions=recent_questions[:30],
         mode=mode,
         today_label=today,
+        language_instruction=language_instruction,
     )
     system_prompt = (
-        "Kamu teman dekat user yang sudah mendengar cerita-ceritanya. "
-        "Tone hangat, penasaran, tidak menghakimi. Bahasa Indonesia kasual, max 25 kata."
+        "You are a close friend who remembers the user's stories. "
+        f"Warm, curious, non-judgmental tone. {language_instruction}"
     )
 
     text = await llm.generate_text(
