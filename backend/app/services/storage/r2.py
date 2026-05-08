@@ -31,7 +31,7 @@ class R2Storage:
         expires_in: int = 600,
     ) -> tuple[str, str]:
         """Mengembalikan (upload_url, storage_key)."""
-        storage_key = f"{key_prefix}/{uuid4().hex}.jpg"
+        storage_key = f"{key_prefix}/{uuid4().hex}.{_extension_for(content_type)}"
         url = self._client.generate_presigned_url(
             ClientMethod="put_object",
             Params={
@@ -50,12 +50,7 @@ class R2Storage:
         data: bytes,
         content_type: str = "image/jpeg",
     ) -> str:
-        extension = {
-            "image/jpeg": "jpg",
-            "image/png": "png",
-            "image/webp": "webp",
-        }.get(content_type, "jpg")
-        storage_key = f"{key_prefix}/{uuid4().hex}.{extension}"
+        storage_key = f"{key_prefix}/{uuid4().hex}.{_extension_for(content_type)}"
         self._client.put_object(
             Bucket=self._bucket,
             Key=storage_key,
@@ -64,8 +59,33 @@ class R2Storage:
         )
         return storage_key
 
+    def download_bytes(self, storage_key: str) -> bytes:
+        obj = self._client.get_object(Bucket=self._bucket, Key=storage_key)
+        return obj["Body"].read()
+
     def public_url(self, storage_key: str) -> str:
         return f"{self._public_base}/{storage_key}"
+
+
+_EXTENSION_BY_TYPE: dict[str, str] = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/aac": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+}
+
+
+def _extension_for(content_type: str) -> str:
+    return _EXTENSION_BY_TYPE.get(content_type, "bin")
 
 
 @lru_cache

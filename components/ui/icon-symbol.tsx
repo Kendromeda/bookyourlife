@@ -34,6 +34,17 @@ const MAPPING = {
   'globe': 'public',
   'wand.and.stars': 'auto-fix-high',
   'magnifyingglass': 'search',
+  'mic.fill': 'mic',
+  'video.fill': 'videocam',
+  'camera.fill': 'photo-camera',
+  'location.fill': 'place',
+  'tag.fill': 'sell',
+  'doc.text.fill': 'description',
+  'ellipsis.circle': 'more-horiz',
+  'photo.stack': 'photo-library',
+  'xmark': 'close',
+  'checkmark': 'check',
+  'cloud': 'cloud',
 } as IconMapping;
 
 export function IconSymbol({

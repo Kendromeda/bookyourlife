@@ -1,5 +1,20 @@
 import { api } from './api';
 
+export type EntryPhoto = { id: string; storage_key: string; position: number };
+export type EntryVideo = {
+  id: string;
+  storage_key: string;
+  duration_seconds: number | null;
+  position: number;
+};
+export type EntryAudio = {
+  id: string;
+  storage_key: string;
+  duration_seconds: number | null;
+  transcript: string | null;
+  position: number;
+};
+
 export type Entry = {
   id: string;
   user_id: string;
@@ -9,7 +24,18 @@ export type Entry = {
   written_at: string;
   created_at: string;
   updated_at: string;
-  photos: { id: string; storage_key: string; position: number }[];
+  lat: number | null;
+  lng: number | null;
+  place_name: string | null;
+  weather: string | null;
+  photos: EntryPhoto[];
+  videos: EntryVideo[];
+  audios: EntryAudio[];
+};
+
+export type MediaAttachmentInput = {
+  storage_key: string;
+  duration_seconds?: number | null;
 };
 
 export type Question = {
@@ -40,6 +66,12 @@ export type CreateEntryInput = {
   question_id?: string | null;
   written_at?: string;
   photo_storage_keys?: string[];
+  video_attachments?: MediaAttachmentInput[];
+  audio_attachments?: MediaAttachmentInput[];
+  lat?: number | null;
+  lng?: number | null;
+  place_name?: string | null;
+  weather?: string | null;
 };
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
@@ -98,6 +130,34 @@ export async function uploadPhoto(
   contentType: string,
   purpose: 'entry-photo' | 'face-photo' = 'entry-photo',
 ): Promise<DirectUpload> {
+  return uploadWithRetry(() => uploadPhotoOnce(fileUri, contentType, purpose));
+}
+
+export async function uploadVideo(fileUri: string, contentType: string): Promise<DirectUpload> {
+  return uploadWithRetry(() => uploadMedia(fileUri, contentType, 'video'));
+}
+
+export async function uploadAudio(fileUri: string, contentType: string): Promise<DirectUpload> {
+  return uploadWithRetry(() => uploadMedia(fileUri, contentType, 'audio'));
+}
+
+async function uploadWithRetry(fn: () => Promise<DirectUpload>): Promise<DirectUpload> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (!error?.response) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      return fn();
+    }
+    throw error;
+  }
+}
+
+async function uploadPhotoOnce(
+  fileUri: string,
+  contentType: string,
+  purpose: 'entry-photo' | 'face-photo',
+): Promise<DirectUpload> {
   const form = new FormData();
   const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
   form.append('purpose', purpose);
@@ -107,8 +167,37 @@ export async function uploadPhoto(
     type: contentType,
   } as any);
 
-  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form);
   return data;
+}
+
+async function uploadMedia(
+  fileUri: string,
+  contentType: string,
+  kind: 'video' | 'audio',
+): Promise<DirectUpload> {
+  const extension = extensionForContentType(contentType, kind);
+  const form = new FormData();
+  form.append('file', {
+    uri: fileUri,
+    name: `${kind}.${extension}`,
+    type: contentType,
+  } as any);
+  const { data } = await api.post<DirectUpload>(`/uploads/${kind}/direct`, form);
+  return data;
+}
+
+function extensionForContentType(
+  contentType: string,
+  kind: 'video' | 'audio',
+): string {
+  if (kind === 'video') {
+    if (contentType === 'video/quicktime') return 'mov';
+    return 'mp4';
+  }
+  if (contentType === 'audio/mpeg') return 'mp3';
+  if (contentType === 'audio/wav' || contentType === 'audio/x-wav') return 'wav';
+  if (contentType === 'audio/webm') return 'webm';
+  if (contentType === 'audio/ogg') return 'ogg';
+  return 'm4a';
 }

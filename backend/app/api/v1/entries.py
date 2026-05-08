@@ -44,7 +44,25 @@ async def create_entry(
         body=payload.body,
         question_id=payload.question_id,
         photo_storage_keys=payload.photo_storage_keys,
+        video_attachments=[
+            entries_service.MediaAttachment(
+                storage_key=item.storage_key,
+                duration_seconds=item.duration_seconds,
+            )
+            for item in payload.video_attachments
+        ],
+        audio_attachments=[
+            entries_service.MediaAttachment(
+                storage_key=item.storage_key,
+                duration_seconds=item.duration_seconds,
+            )
+            for item in payload.audio_attachments
+        ],
         written_at=payload.written_at,
+        lat=payload.lat,
+        lng=payload.lng,
+        place_name=payload.place_name,
+        weather=payload.weather,
     )
     try:
         index_entry_task.delay(str(entry.id))
@@ -82,7 +100,8 @@ async def delete_entry(
 
 
 def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
-    storage = get_r2_storage() if entry.photos else None
+    has_media = bool(entry.photos or entry.videos or entry.audios)
+    storage = get_r2_storage() if has_media else None
     return EntryOut(
         id=entry.id,
         user_id=entry.user_id,
@@ -92,6 +111,10 @@ def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
         written_at=entry.written_at,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+        lat=entry.lat,
+        lng=entry.lng,
+        place_name=entry.place_name,
+        weather=entry.weather,
         photos=[
             {  # type: ignore[list-item]
                 "id": p.id,
@@ -99,5 +122,24 @@ def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
                 "position": p.position,
             }
             for p in (entry.photos or [])
+        ],
+        videos=[
+            {  # type: ignore[list-item]
+                "id": v.id,
+                "storage_key": storage.public_url(v.storage_key) if storage else v.storage_key,
+                "duration_seconds": v.duration_seconds,
+                "position": v.position,
+            }
+            for v in (entry.videos or [])
+        ],
+        audios=[
+            {  # type: ignore[list-item]
+                "id": a.id,
+                "storage_key": storage.public_url(a.storage_key) if storage else a.storage_key,
+                "duration_seconds": a.duration_seconds,
+                "transcript": a.transcript,
+                "position": a.position,
+            }
+            for a in (entry.audios or [])
         ],
     )

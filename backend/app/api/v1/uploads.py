@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
@@ -8,8 +9,24 @@ from app.schemas.entry import DirectUploadOut, PresignedUploadOut
 from app.services.storage.r2 import get_r2_storage
 
 router = APIRouter()
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+logger = structlog.get_logger()
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime"}
+ALLOWED_AUDIO_TYPES = {
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/aac",
+    "audio/x-m4a",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/webm",
+    "audio/ogg",
+}
 
 
 class PresignedRequestIn(BaseModel):
@@ -28,6 +45,7 @@ async def presign_photo(payload: PresignedRequestIn, user: CurrentUser) -> Presi
             expires_in=600,
         )
     except Exception as exc:
+        logger.exception("r2 presign failed", user_id=str(user.id), purpose=payload.purpose)
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Storage tidak tersedia"
         ) from exc
@@ -44,22 +62,101 @@ async def upload_photo_direct(
     file: Annotated[UploadFile, File()],
     purpose: Annotated[str, Form(pattern="^(entry-photo|face-photo)$")] = "entry-photo",
 ) -> DirectUploadOut:
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Unsupported image type")
+    return await _upload_direct(
+        user_id=str(user.id),
+        file=file,
+        prefix=f"{purpose}/{user.id}",
+        allowed=ALLOWED_IMAGE_TYPES,
+        max_bytes=MAX_IMAGE_BYTES,
+        kind_label="image",
+    )
 
-    data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Image is too large")
+
+@router.post("/video/direct", response_model=DirectUploadOut)
+async def upload_video_direct(
+    user: CurrentUser,
+    file: Annotated[UploadFile, File()],
+) -> DirectUploadOut:
+    return await _upload_direct(
+        user_id=str(user.id),
+        file=file,
+        prefix=f"entry-video/{user.id}",
+        allowed=ALLOWED_VIDEO_TYPES,
+        max_bytes=MAX_VIDEO_BYTES,
+        kind_label="video",
+    )
+
+
+@router.post("/audio/direct", response_model=DirectUploadOut)
+async def upload_audio_direct(
+    user: CurrentUser,
+    file: Annotated[UploadFile, File()],
+) -> DirectUploadOut:
+    return await _upload_direct(
+        user_id=str(user.id),
+        file=file,
+        prefix=f"entry-audio/{user.id}",
+        allowed=ALLOWED_AUDIO_TYPES,
+        max_bytes=MAX_AUDIO_BYTES,
+        kind_label="audio",
+    )
+
+
+_CHUNK_SIZE = 1024 * 1024  # 1 MiB
+
+
+async def _upload_direct(
+    *,
+    user_id: str,
+    file: UploadFile,
+    prefix: str,
+    allowed: set[str],
+    max_bytes: int,
+    kind_label: str,
+) -> DirectUploadOut:
+    if file.content_type not in allowed:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Unsupported {kind_label} type",
+        )
+
+    declared_size = file.size
+    if declared_size is not None and declared_size > max_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"{kind_label.title()} is too large",
+        )
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                f"{kind_label.title()} is too large",
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
 
     storage = get_r2_storage()
-    prefix = f"{purpose}/{user.id}"
     try:
         storage_key = storage.upload_bytes(
             key_prefix=prefix,
             data=data,
-            content_type=file.content_type or "image/jpeg",
+            content_type=file.content_type or "application/octet-stream",
         )
     except Exception as exc:
+        logger.exception(
+            "r2 direct upload failed",
+            user_id=user_id,
+            kind=kind_label,
+            content_type=file.content_type,
+            size=len(data),
+        )
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Storage tidak tersedia"
         ) from exc
