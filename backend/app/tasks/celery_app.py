@@ -39,3 +39,4 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=30),  # tiap 30 menit lewat
     },
 }
+import app.tasks.image_gen  # noqa: F401

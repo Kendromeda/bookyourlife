@@ -153,6 +153,8 @@ async function uploadWithRetry(fn: () => Promise<DirectUpload>): Promise<DirectU
   }
 }
 
+const UPLOAD_TIMEOUT_MS = 120_000;
+
 async function uploadPhotoOnce(
   fileUri: string,
   contentType: string,
@@ -167,7 +169,10 @@ async function uploadPhotoOnce(
     type: contentType,
   } as any);
 
-  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form);
+  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
   return data;
 }
 
@@ -183,7 +188,10 @@ async function uploadMedia(
     name: `${kind}.${extension}`,
     type: contentType,
   } as any);
-  const { data } = await api.post<DirectUpload>(`/uploads/${kind}/direct`, form);
+  const { data } = await api.post<DirectUpload>(`/uploads/${kind}/direct`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
   return data;
 }
 

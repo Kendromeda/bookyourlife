@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 
+import { AIToolsSheet } from '@/components/feature/AIToolsSheet';
 import { AudioRecorderRow, RecordedClip } from '@/components/feature/AudioRecorderRow';
 import { VideoClip, VideoClipRow } from '@/components/feature/VideoClipRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -52,6 +53,8 @@ function inferVideoMime(uri: string, fallback?: string): string {
   return 'video/mp4';
 }
 
+type AITool = 'titles' | 'prompts' | 'highlights' | 'image';
+
 type Props = {
   questionId?: string | null;
   questionText?: string | null;
@@ -80,6 +83,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const [location, setLocation] = useState<CapturedLocation | null>(null);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeAITool, setActiveAITool] = useState<AITool | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [audioRecorderVisible, setAudioRecorderVisible] = useState(false);
@@ -458,7 +462,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Title Suggestions"
             onPress={() => {
               setAiOpen(false);
-              setError('AI tools coming in Phase C');
+              setActiveAITool('titles');
             }}
           />
           <SheetTile
@@ -466,7 +470,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Writing Prompts"
             onPress={() => {
               setAiOpen(false);
-              setError('AI tools coming in Phase C');
+              setActiveAITool('prompts');
             }}
           />
           <SheetTile
@@ -474,7 +478,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Generate Image"
             onPress={() => {
               setAiOpen(false);
-              setError('AI tools coming in Phase C');
+              setActiveAITool('highlights');
             }}
           />
           <SheetTile
@@ -482,11 +486,30 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Entry Highlights"
             onPress={() => {
               setAiOpen(false);
-              setError('AI tools coming in Phase C');
+              setActiveAITool('image');
             }}
           />
         </View>
       </BottomSheet>
+      <AIToolsSheet
+        visible={activeAITool !== null}
+        onClose={() => setActiveAITool(null)}
+        tool={activeAITool ?? 'titles'}
+        entryBody={body}
+        onApplyTitle={setTitle}
+        onAppendText={(text) => setBody((current) => `${current.trimEnd()}\n\n${text}`)}
+        onAddPhoto={(image) =>
+          setPhotos((current) => [
+            ...current,
+            {
+              id: makeId(),
+              uri: image.public_url,
+              storage_key: image.storage_key,
+              uploading: false,
+            },
+          ])
+        }
+      />
     </KeyboardAvoidingView>
   );
 });
