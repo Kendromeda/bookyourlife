@@ -1,4 +1,4 @@
-"""Celery task: generate image via OpenAI gpt-image-1 + upload to R2.
+"""Celery task: generate image via OpenAI GPT Image + upload to R2.
 
 Updates an AiImageJob row through pending -> processing -> done/failed.
 """
@@ -20,12 +20,12 @@ from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
 
-_IMAGE_MODEL = "gpt-image-1"
-_IMAGE_SIZE = "1024x1024"
+HTTP_CLIENT_ERROR_MIN = 400
+HTTP_SERVER_ERROR_MIN = 500
 
 
 @celery_app.task(name="app.tasks.image_gen.generate_image", bind=True, max_retries=2)
-def generate_image(self, job_id: str, prompt: str) -> None:  # noqa: ANN001
+def generate_image(self, job_id: str, prompt: str) -> None:
     settings = get_settings()
     if not settings.openai_api_key:
         logger.warning("openai key missing, marking failed", job_id=job_id)
@@ -38,7 +38,7 @@ def generate_image(self, job_id: str, prompt: str) -> None:  # noqa: ANN001
         logger.warning("image gen permanent failure", job_id=job_id, error=str(exc))
         asyncio.run(_mark_failed(UUID(job_id), str(exc)))
     except APIStatusError as exc:
-        if 400 <= exc.status_code < 500:
+        if HTTP_CLIENT_ERROR_MIN <= exc.status_code < HTTP_SERVER_ERROR_MIN:
             logger.warning(
                 "image gen rejected by openai",
                 job_id=job_id,
@@ -75,10 +75,11 @@ async def _run(job_id: UUID, prompt: str) -> None:
 
     client = OpenAI(api_key=settings.openai_api_key)
     response = client.images.generate(
-        model=_IMAGE_MODEL,
+        model=settings.openai_model_image,
         prompt=prompt,
         n=1,
-        size=_IMAGE_SIZE,
+        size=settings.openai_image_size,
+        timeout=120,
     )
 
     if not response.data or not response.data[0].b64_json:

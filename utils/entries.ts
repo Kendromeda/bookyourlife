@@ -142,15 +142,21 @@ export async function uploadAudio(fileUri: string, contentType: string): Promise
 }
 
 async function uploadWithRetry(fn: () => Promise<DirectUpload>): Promise<DirectUpload> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (!error?.response) {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      return fn();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.response?.status;
+      const retryable = !error?.response || [408, 429, 500, 502, 503, 504].includes(status);
+      if (!retryable || attempt === 1) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800));
     }
-    throw error;
   }
+  throw normalizeUploadError(lastError);
 }
 
 const UPLOAD_TIMEOUT_MS = 120_000;
@@ -170,7 +176,6 @@ async function uploadPhotoOnce(
   } as any);
 
   const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_TIMEOUT_MS,
   });
   return data;
@@ -189,7 +194,6 @@ async function uploadMedia(
     type: contentType,
   } as any);
   const { data } = await api.post<DirectUpload>(`/uploads/${kind}/direct`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_TIMEOUT_MS,
   });
   return data;
@@ -205,7 +209,23 @@ function extensionForContentType(
   }
   if (contentType === 'audio/mpeg') return 'mp3';
   if (contentType === 'audio/wav' || contentType === 'audio/x-wav') return 'wav';
+  if (contentType === 'audio/3gpp') return '3gp';
   if (contentType === 'audio/webm') return 'webm';
   if (contentType === 'audio/ogg') return 'ogg';
   return 'm4a';
+}
+
+function normalizeUploadError(error: any): Error {
+  const status = error?.response?.status;
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) {
+    return new Error(status ? `Upload failed (${status}): ${detail}` : detail);
+  }
+  if (status) {
+    return new Error(`Upload failed with status code ${status}`);
+  }
+  if (error instanceof Error && error.message) {
+    return error;
+  }
+  return new Error('Upload failed. Check your connection and try again.');
 }

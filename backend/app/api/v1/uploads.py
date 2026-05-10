@@ -3,6 +3,7 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser
 from app.schemas.entry import DirectUploadOut, PresignedUploadOut
@@ -15,15 +16,17 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_VIDEO_BYTES = 100 * 1024 * 1024
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime"}
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-m4v", "video/3gpp"}
 ALLOWED_AUDIO_TYPES = {
     "audio/mpeg",
     "audio/mp4",
     "audio/aac",
+    "audio/m4a",
     "audio/x-m4a",
     "audio/wav",
     "audio/x-wav",
+    "audio/3gpp",
     "audio/webm",
     "audio/ogg",
 }
@@ -114,7 +117,8 @@ async def _upload_direct(
     max_bytes: int,
     kind_label: str,
 ) -> DirectUploadOut:
-    if file.content_type not in allowed:
+    content_type = _normalize_content_type(file.content_type)
+    if content_type not in allowed:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             f"Unsupported {kind_label} type",
@@ -144,17 +148,18 @@ async def _upload_direct(
 
     storage = get_r2_storage()
     try:
-        storage_key = storage.upload_bytes(
+        storage_key = await run_in_threadpool(
+            storage.upload_bytes,
             key_prefix=prefix,
             data=data,
-            content_type=file.content_type or "application/octet-stream",
+            content_type=content_type,
         )
     except Exception as exc:
         logger.exception(
             "r2 direct upload failed",
             user_id=user_id,
             kind=kind_label,
-            content_type=file.content_type,
+            content_type=content_type,
             size=len(data),
         )
         raise HTTPException(
@@ -165,3 +170,9 @@ async def _upload_direct(
         storage_key=storage_key,
         public_url=storage.public_url(storage_key),
     )
+
+
+def _normalize_content_type(content_type: str | None) -> str:
+    if not content_type:
+        return "application/octet-stream"
+    return content_type.split(";", 1)[0].strip().lower()

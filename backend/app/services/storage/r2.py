@@ -69,16 +69,21 @@ class R2Storage:
 
 _EXTENSION_BY_TYPE: dict[str, str] = {
     "image/jpeg": "jpg",
+    "image/jpg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "video/mp4": "mp4",
     "video/quicktime": "mov",
+    "video/x-m4v": "m4v",
+    "video/3gpp": "3gp",
     "audio/mpeg": "mp3",
     "audio/mp4": "m4a",
     "audio/aac": "m4a",
+    "audio/m4a": "m4a",
     "audio/x-m4a": "m4a",
     "audio/wav": "wav",
     "audio/x-wav": "wav",
+    "audio/3gpp": "3gp",
     "audio/webm": "webm",
     "audio/ogg": "ogg",
 }

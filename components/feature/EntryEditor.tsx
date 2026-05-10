@@ -4,6 +4,7 @@ import { useCallback, useEffect, useImperativeHandle, useState, forwardRef } fro
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AIToolsSheet } from '@/components/feature/AIToolsSheet';
 import { AudioRecorderRow, RecordedClip } from '@/components/feature/AudioRecorderRow';
@@ -73,6 +75,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 ) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const insets = useSafeAreaInsets();
   const qc = useQueryClient();
 
   const [title, setTitle] = useState('');
@@ -87,6 +90,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const [moreOpen, setMoreOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [audioRecorderVisible, setAudioRecorderVisible] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const pickPhoto = async (fromCamera = false) => {
     if (photos.length >= MAX_PHOTOS) return;
@@ -284,13 +288,25 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     onSubmittingChange?.(submit.isPending);
   }, [submit.isPending, onSubmittingChange]);
 
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  const bottomGap = keyboardVisible ? Spacing.sm : Spacing.lg + insets.bottom;
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, keyboardVisible && styles.keyboardContainer]}
         keyboardShouldPersistTaps="handled"
       >
         {questionText && (
@@ -361,7 +377,12 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
       {/* Location footer card */}
       {(location || locating) && (
-        <View style={[styles.metaCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <View
+          style={[
+            styles.metaCard,
+            { backgroundColor: c.surface, borderColor: c.border },
+          ]}
+        >
           <IconSymbol name="location.fill" size={14} color={c.accent} />
           {locating ? (
             <Text style={[styles.metaText, { color: c.muted }]}>Locating…</Text>
@@ -379,7 +400,16 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       )}
 
       {/* Attachments toolbar */}
-      <View style={[styles.toolbar, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <View
+        style={[
+          styles.toolbar,
+          {
+            backgroundColor: c.surface,
+            borderColor: c.border,
+            marginBottom: bottomGap,
+          },
+        ]}
+      >
         <ToolbarBtn
           icon="photo.stack"
           label="Photos"
@@ -478,7 +508,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Generate Image"
             onPress={() => {
               setAiOpen(false);
-              setActiveAITool('highlights');
+              setActiveAITool('image');
             }}
           />
           <SheetTile
@@ -486,7 +516,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             label="Entry Highlights"
             onPress={() => {
               setAiOpen(false);
-              setActiveAITool('image');
+              setActiveAITool('highlights');
             }}
           />
         </View>
@@ -597,6 +627,7 @@ function SheetTile({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: Spacing.lg, paddingBottom: 0 },
+  keyboardContainer: { paddingBottom: 120 },
   questionBox: {
     borderWidth: 1,
     borderRadius: Radii.md,
@@ -654,7 +685,6 @@ const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: Radii.lg,
     borderWidth: 1,

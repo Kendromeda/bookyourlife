@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     openai_model_narrative: str = "gpt-4o"
     openai_model_embedding: str = "text-embedding-3-small"
     openai_model_whisper: str = "whisper-1"
+    openai_model_image: str = "gpt-image-2"
+    openai_image_size: str = "1024x1024"
 
     replicate_api_token: str = ""
     replicate_model_flux: str = "black-forest-labs/flux-1.1-pro"
