@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, apiV1BaseURL, getApiBearerToken } from './api';
 
 export type EntryPhoto = { id: string; storage_key: string; position: number };
 export type EntryVideo = {
@@ -175,10 +175,7 @@ async function uploadPhotoOnce(
     type: contentType,
   } as any);
 
-  const { data } = await api.post<DirectUpload>('/uploads/photo/direct', form, {
-    timeout: UPLOAD_TIMEOUT_MS,
-  });
-  return data;
+  return uploadForm('/uploads/photo/direct', form);
 }
 
 async function uploadMedia(
@@ -193,10 +190,34 @@ async function uploadMedia(
     name: `${kind}.${extension}`,
     type: contentType,
   } as any);
-  const { data } = await api.post<DirectUpload>(`/uploads/${kind}/direct`, form, {
-    timeout: UPLOAD_TIMEOUT_MS,
-  });
-  return data;
+  return uploadForm(`/uploads/${kind}/direct`, form);
+}
+
+async function uploadForm(path: string, form: FormData): Promise<DirectUpload> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  try {
+    const token = await getApiBearerToken();
+    const response = await fetch(`${apiV1BaseURL}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+      signal: controller.signal,
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw {
+        response: {
+          status: response.status,
+          data: payload,
+        },
+      };
+    }
+    return payload as DirectUpload;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function extensionForContentType(

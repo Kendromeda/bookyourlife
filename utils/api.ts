@@ -6,8 +6,11 @@ const baseURL =
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
   'http://10.0.2.2:8000';
 
+export const apiBaseURL = baseURL.replace(/\/$/, '');
+export const apiV1BaseURL = `${apiBaseURL}/api/v1`;
+
 export const api: AxiosInstance = axios.create({
-  baseURL: `${baseURL.replace(/\/$/, '')}/api/v1`,
+  baseURL: apiV1BaseURL,
   timeout: 15000,
 });
 
@@ -16,6 +19,11 @@ let _getToken: (() => Promise<string | null>) | null = null;
 
 export function setApiTokenGetter(fn: () => Promise<string | null>) {
   _getToken = fn;
+}
+
+export async function getApiBearerToken(): Promise<string | null> {
+  if (!_getToken) return null;
+  return _getToken();
 }
 
 api.interceptors.request.use(async (config) => {
