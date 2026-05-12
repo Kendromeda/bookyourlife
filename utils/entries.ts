@@ -18,6 +18,7 @@ export type EntryAudio = {
 export type Entry = {
   id: string;
   user_id: string;
+  title: string | null;
   body: string;
   question_id: string | null;
   emotion_tags: string[];
@@ -38,6 +39,17 @@ export type MediaAttachmentInput = {
   duration_seconds?: number | null;
 };
 
+export type PhotoUpdateItem = {
+  id?: string;
+  storage_key?: string;
+};
+
+export type MediaUpdateItem = {
+  id?: string;
+  storage_key?: string;
+  duration_seconds?: number | null;
+};
+
 export type Question = {
   id: string;
   text: string;
@@ -54,14 +66,25 @@ export type EntryListPage = {
   next_cursor: string | null;
 };
 
-export async function fetchEntries(cursor?: string, limit = 20): Promise<EntryListPage> {
+export type FetchEntriesParams = {
+  cursor?: string;
+  limit?: number;
+  /** ISO datetime — inclusive lower bound on written_at */
+  from?: string;
+  /** ISO datetime — exclusive upper bound on written_at */
+  to?: string;
+};
+
+export async function fetchEntries(params: FetchEntriesParams = {}): Promise<EntryListPage> {
+  const { cursor, limit = 20, from, to } = params;
   const { data } = await api.get<EntryListPage>('/entries', {
-    params: { cursor, limit },
+    params: { cursor, limit, from, to },
   });
   return data;
 }
 
 export type CreateEntryInput = {
+  title?: string | null;
   body: string;
   question_id?: string | null;
   written_at?: string;
@@ -74,9 +97,46 @@ export type CreateEntryInput = {
   weather?: string | null;
 };
 
+export type UpdateEntryInput = {
+  title: string | null;
+  body: string;
+  written_at?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  place_name?: string | null;
+  weather?: string | null;
+  photos: PhotoUpdateItem[];
+  videos: MediaUpdateItem[];
+  audios: MediaUpdateItem[];
+};
+
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   const { data } = await api.post<Entry>('/entries', input);
   return data;
+}
+
+export async function fetchEntry(id: string): Promise<Entry> {
+  const { data } = await api.get<Entry>(`/entries/${id}`);
+  return data;
+}
+
+export type EntryNeighbors = {
+  older: Entry | null;
+  newer: Entry | null;
+};
+
+export async function fetchEntryNeighbors(id: string): Promise<EntryNeighbors> {
+  const { data } = await api.get<EntryNeighbors>(`/entries/${id}/neighbors`);
+  return data;
+}
+
+export async function updateEntry(id: string, input: UpdateEntryInput): Promise<Entry> {
+  const { data } = await api.patch<Entry>(`/entries/${id}`, input);
+  return data;
+}
+
+export async function deleteEntry(id: string): Promise<void> {
+  await api.delete(`/entries/${id}`);
 }
 
 export async function fetchTodayQuestion(): Promise<Question | null> {

@@ -45,6 +45,8 @@ const MAPPING = {
   'xmark': 'close',
   'checkmark': 'check',
   'cloud': 'cloud',
+  'play.fill': 'play-arrow',
+  'pause.fill': 'pause',
 } as IconMapping;
 
 export function IconSymbol({

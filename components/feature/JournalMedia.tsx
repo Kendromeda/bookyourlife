@@ -13,7 +13,8 @@ export function JournalMedia() {
 
   const query = useInfiniteQuery<EntryListPage>({
     queryKey: ['entries', 'all'],
-    queryFn: ({ pageParam }) => fetchEntries(pageParam as string | undefined, 100),
+    queryFn: ({ pageParam }) =>
+      fetchEntries({ cursor: pageParam as string | undefined, limit: 100 }),
     initialPageParam: undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   });

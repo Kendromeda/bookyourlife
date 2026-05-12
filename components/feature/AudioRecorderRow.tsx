@@ -20,6 +20,8 @@ export type RecordedClip = {
   duration_seconds: number;
   uploading: boolean;
   storage_key: string | null;
+  existing_id?: string;
+  transcript?: string | null;
 };
 
 export type AudioRecorderRowProps = {
@@ -147,7 +149,7 @@ function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => v
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <IconSymbol
-            name={status.playing ? 'checkmark' : 'mic.fill'}
+            name={status.playing ? 'pause.fill' : 'play.fill'}
             size={14}
             color="#fff"
           />

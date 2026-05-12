@@ -18,6 +18,7 @@ class Entry(UUIDMixin, TimestampMixin, Base):
     question_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("questions.id"), nullable=True
     )
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     body_embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     emotion_tags: Mapped[list[str]] = mapped_column(

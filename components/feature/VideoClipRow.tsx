@@ -1,9 +1,8 @@
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radii, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Radii, Spacing } from '@/constants/theme';
 
 export type VideoClip = {
   id: string;
@@ -11,7 +10,19 @@ export type VideoClip = {
   duration_seconds: number | null;
   uploading: boolean;
   storage_key: string | null;
+  existing_id?: string;
 };
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const PREVIEW_WIDTH = SCREEN_WIDTH - Spacing.lg * 2;
+const PREVIEW_HEIGHT = Math.round(PREVIEW_WIDTH * 0.56);
+
+function formatDuration(s: number | null): string {
+  if (!s) return '';
+  const mins = Math.floor(s / 60);
+  const secs = Math.floor(s % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 export function VideoClipRow({
   clip,
@@ -20,65 +31,77 @@ export function VideoClipRow({
   clip: VideoClip;
   onRemove: () => void;
 }) {
-  const scheme = useColorScheme() ?? 'light';
-  const c = Colors[scheme];
   const player = useVideoPlayer(clip.uri, (p) => {
     p.loop = false;
-    p.muted = true;
+    p.muted = false;
   });
 
   return (
-    <View style={[styles.row, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <View style={[styles.thumb, { backgroundColor: c.background }]}>
+    <View style={styles.wrapper}>
+      <View style={styles.preview}>
         <VideoView
           player={player}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          nativeControls={false}
+          nativeControls
         />
         {clip.uploading && (
           <View style={styles.overlay}>
             <ActivityIndicator color="#fff" size="small" />
+            <Text style={styles.overlayLabel}>Uploading…</Text>
           </View>
         )}
+        {clip.duration_seconds && !clip.uploading ? (
+          <View style={styles.duration}>
+            <Text style={styles.durationLabel}>{formatDuration(clip.duration_seconds)}</Text>
+          </View>
+        ) : null}
+        <TouchableOpacity onPress={onRemove} style={styles.remove}>
+          <IconSymbol name="xmark" size={14} color="#fff" />
+        </TouchableOpacity>
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.label, { color: c.text }]}>Video</Text>
-        <Text style={[styles.meta, { color: c.muted }]}>
-          {clip.duration_seconds ? `${clip.duration_seconds}s` : 'attached'}
-          {clip.uploading ? ' · uploading…' : clip.storage_key ? ' · saved' : ''}
-        </Text>
-      </View>
-      <TouchableOpacity onPress={onRemove} style={styles.remove}>
-        <IconSymbol name="xmark" size={14} color={c.muted} />
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.sm,
-    borderRadius: Radii.md,
-    borderWidth: 1,
+  wrapper: {
     marginTop: Spacing.lg,
   },
-  thumb: {
-    width: 64,
-    height: 48,
-    borderRadius: Radii.sm,
+  preview: {
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT,
+    borderRadius: Radii.md,
     overflow: 'hidden',
+    backgroundColor: '#000',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  overlayLabel: { color: '#fff', fontSize: 13, fontWeight: '500' },
+  duration: {
+    position: 'absolute',
+    bottom: Spacing.sm,
+    right: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
+  },
+  durationLabel: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  remove: {
+    position: 'absolute',
+    top: Spacing.sm,
+    right: Spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { fontSize: 14, fontWeight: '500' },
-  meta: { fontSize: 12, marginTop: 2 },
-  remove: { padding: Spacing.xs },
 });

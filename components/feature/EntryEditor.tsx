@@ -1,8 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useImperativeHandle, useState, forwardRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -24,14 +32,28 @@ import { VideoClip, VideoClipRow } from '@/components/feature/VideoClipRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createEntry, uploadAudio, uploadPhoto, uploadVideo } from '@/utils/entries';
+import {
+  createEntry,
+  deleteEntry,
+  fetchEntry,
+  updateEntry,
+  uploadAudio,
+  uploadPhoto,
+  uploadVideo,
+} from '@/utils/entries';
 import { CapturedLocation, captureCurrentLocation } from '@/utils/location';
 
 const MAX_PHOTOS = 5;
 const MAX_VIDEOS = 1;
 const MAX_AUDIOS = 3;
 
-type Photo = { id: string; uri: string; storage_key: string | null; uploading: boolean };
+type Photo = {
+  id: string;
+  uri: string;
+  storage_key: string | null;
+  uploading: boolean;
+  existing_id?: string;
+};
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -60,17 +82,35 @@ type AITool = 'titles' | 'prompts' | 'highlights' | 'image';
 type Props = {
   questionId?: string | null;
   questionText?: string | null;
+  entryId?: string | null;
+  /** ISO string. If set on a fresh entry, the entry will be backdated. */
+  initialWrittenAt?: string | null;
   onDone: () => void;
   onCanSubmitChange?: (canSubmit: boolean) => void;
   onSubmittingChange?: (submitting: boolean) => void;
+  onEditModeChange?: (isEditMode: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onWrittenAtChange?: (writtenAt: string | null) => void;
 };
 
 export type EntryEditorHandle = {
   submit: () => void;
+  delete: () => void;
 };
 
 export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEditor(
-  { questionId, questionText, onDone, onCanSubmitChange, onSubmittingChange },
+  {
+    questionId,
+    questionText,
+    entryId,
+    initialWrittenAt,
+    onDone,
+    onCanSubmitChange,
+    onSubmittingChange,
+    onEditModeChange,
+    onDirtyChange,
+    onWrittenAtChange,
+  },
   ref,
 ) {
   const scheme = useColorScheme() ?? 'light';
@@ -91,6 +131,88 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const [aiOpen, setAiOpen] = useState(false);
   const [audioRecorderVisible, setAudioRecorderVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+  const [writtenAt, setWrittenAt] = useState<string | null>(initialWrittenAt ?? null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const isEditMode = Boolean(entryId);
+  const entryQuery = useQuery({
+    queryKey: ['entry', entryId],
+    queryFn: () => fetchEntry(entryId!),
+    enabled: isEditMode,
+  });
+
+  useEffect(() => {
+    onEditModeChange?.(isEditMode);
+  }, [isEditMode, onEditModeChange]);
+
+  // Pre-fill state from fetched entry. Only runs once per load.
+  useEffect(() => {
+    if (!entryQuery.data || prefilled) return;
+    const e = entryQuery.data;
+    setTitle(e.title ?? '');
+    setBody(e.body);
+    setWrittenAt(e.written_at);
+    if (e.lat != null && e.lng != null) {
+      setLocation({ lat: e.lat, lng: e.lng, place_name: e.place_name });
+    }
+    setPhotos(
+      e.photos.map((p) => ({
+        id: p.id,
+        uri: p.storage_key,
+        storage_key: p.storage_key,
+        uploading: false,
+        existing_id: p.id,
+      })),
+    );
+    setVideos(
+      e.videos.map((v) => ({
+        id: v.id,
+        uri: v.storage_key,
+        duration_seconds: v.duration_seconds,
+        uploading: false,
+        storage_key: v.storage_key,
+        existing_id: v.id,
+      })),
+    );
+    setAudios(
+      e.audios.map((a) => ({
+        id: a.id,
+        uri: a.storage_key,
+        duration_seconds: a.duration_seconds ?? 0,
+        uploading: false,
+        storage_key: a.storage_key,
+        existing_id: a.id,
+        transcript: a.transcript,
+      })),
+    );
+    setPrefilled(true);
+    setIsDirty(false);
+  }, [entryQuery.data, prefilled]);
+
+  // Emit written_at + dirty changes
+  useEffect(() => {
+    onWrittenAtChange?.(writtenAt);
+  }, [writtenAt, onWrittenAtChange]);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // After prefill (create mode) or after first prefill (edit mode), any
+  // *subsequent* state change marks the editor dirty. We skip the first
+  // run when readiness flips so prefill itself isn't treated as a user
+  // edit.
+  const isReadyForDirtyTracking = !isEditMode || prefilled;
+  const dirtyTrackingArmed = useRef(false);
+  useEffect(() => {
+    if (!isReadyForDirtyTracking) return;
+    if (!dirtyTrackingArmed.current) {
+      dirtyTrackingArmed.current = true;
+      return;
+    }
+    setIsDirty(true);
+  }, [title, body, photos, videos, audios, location, isReadyForDirtyTracking]);
 
   const pickPhoto = async (fromCamera = false) => {
     if (photos.length >= MAX_PHOTOS) return;
@@ -218,53 +340,106 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
   const submit = useMutation({
     mutationFn: async () => {
-      const photoKeys = photos
-        .map((p) => p.storage_key)
-        .filter((k): k is string => k !== null);
-      const videoAttachments = videos
-        .filter((v) => v.storage_key !== null)
-        .map((v) => ({
-          storage_key: v.storage_key!,
-          duration_seconds: v.duration_seconds,
-        }));
-      const audioAttachments = audios
-        .filter((a) => a.storage_key !== null)
-        .map((a) => ({
-          storage_key: a.storage_key!,
-          duration_seconds: a.duration_seconds,
-        }));
-
       const text = body.trim();
       const titleText = title.trim();
-      const composed = titleText && text ? `${titleText}\n\n${text}` : titleText || text;
       const fallback =
-        photoKeys.length > 0
+        photos.length > 0
           ? '(photo)'
-          : videoAttachments.length > 0
+          : videos.length > 0
           ? '(video)'
-          : audioAttachments.length > 0
+          : audios.length > 0
           ? '(voice note)'
           : '';
-      const finalBody = composed || fallback;
+      const finalBody = text || fallback;
+      const finalTitle = titleText || null;
 
-      await createEntry({
-        body: finalBody,
-        question_id: questionId ?? null,
-        written_at: new Date().toISOString(),
-        photo_storage_keys: photoKeys,
-        video_attachments: videoAttachments,
-        audio_attachments: audioAttachments,
-        lat: location?.lat ?? null,
-        lng: location?.lng ?? null,
-        place_name: location?.place_name ?? null,
-      });
+      if (isEditMode && entryId) {
+        await updateEntry(entryId, {
+          title: finalTitle,
+          body: finalBody,
+          lat: location?.lat ?? null,
+          lng: location?.lng ?? null,
+          place_name: location?.place_name ?? null,
+          photos: photos.map((p) =>
+            p.existing_id
+              ? { id: p.existing_id }
+              : { storage_key: p.storage_key ?? '' },
+          ),
+          videos: videos.map((v) =>
+            v.existing_id
+              ? { id: v.existing_id }
+              : {
+                  storage_key: v.storage_key ?? '',
+                  duration_seconds: v.duration_seconds,
+                },
+          ),
+          audios: audios.map((a) =>
+            a.existing_id
+              ? { id: a.existing_id }
+              : {
+                  storage_key: a.storage_key ?? '',
+                  duration_seconds: a.duration_seconds,
+                },
+          ),
+        });
+      } else {
+        const photoKeys = photos
+          .map((p) => p.storage_key)
+          .filter((k): k is string => k !== null);
+        const videoAttachments = videos
+          .filter((v) => v.storage_key !== null)
+          .map((v) => ({
+            storage_key: v.storage_key!,
+            duration_seconds: v.duration_seconds,
+          }));
+        const audioAttachments = audios
+          .filter((a) => a.storage_key !== null)
+          .map((a) => ({
+            storage_key: a.storage_key!,
+            duration_seconds: a.duration_seconds,
+          }));
+
+        await createEntry({
+          title: finalTitle,
+          body: finalBody,
+          question_id: questionId ?? null,
+          written_at: writtenAt ?? new Date().toISOString(),
+          photo_storage_keys: photoKeys,
+          video_attachments: videoAttachments,
+          audio_attachments: audioAttachments,
+          lat: location?.lat ?? null,
+          lng: location?.lng ?? null,
+          place_name: location?.place_name ?? null,
+        });
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] });
       qc.invalidateQueries({ queryKey: ['questions', 'today'] });
+      if (entryId) {
+        qc.invalidateQueries({ queryKey: ['entry', entryId] });
+        // Neighbor entries may carry a snapshot of this entry's data.
+        qc.invalidateQueries({ queryKey: ['entry-neighbors'] });
+      }
+      setIsDirty(false);
       onDone();
     },
     onError: (e: any) => setError(e?.message ?? 'Failed to save entry'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!entryId) throw new Error('Cannot delete unsaved entry');
+      await deleteEntry(entryId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entries'] });
+      qc.invalidateQueries({ queryKey: ['entry', entryId] });
+      // Any neighbor cache that referenced this entry is now stale.
+      qc.invalidateQueries({ queryKey: ['entry-neighbors'] });
+      onDone();
+    },
+    onError: (e: any) => setError(e?.message ?? 'Failed to delete entry'),
   });
 
   const hasContent =
@@ -277,10 +452,18 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     photos.some((p) => p.uploading) ||
     videos.some((v) => v.uploading) ||
     audios.some((a) => a.uploading);
-  const canSubmit = hasContent && !anyUploading && !submit.isPending;
+  const editPending = isEditMode && !prefilled;
+  const canSubmit = hasContent && !anyUploading && !submit.isPending && !editPending;
 
-  // expose submit + sync state up
-  useImperativeHandle(ref, () => ({ submit: () => submit.mutate() }), [submit]);
+  // expose submit + delete + sync state up
+  useImperativeHandle(
+    ref,
+    () => ({
+      submit: () => submit.mutate(),
+      delete: () => deleteMutation.mutate(),
+    }),
+    [submit, deleteMutation],
+  );
   useEffect(() => {
     onCanSubmitChange?.(canSubmit);
   }, [canSubmit, onCanSubmitChange]);
@@ -298,6 +481,14 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   }, []);
 
   const bottomGap = keyboardVisible ? Spacing.sm : Spacing.lg + insets.bottom;
+
+  if (editPending) {
+    return (
+      <View style={[styles.flex, styles.centerLoader]}>
+        <ActivityIndicator color={c.accent} />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -335,24 +526,32 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         />
 
         {photos.length > 0 && (
-          <View style={styles.photoRow}>
-            {photos.map((p) => (
-              <View key={p.id} style={styles.photoSlot}>
-                <Image source={{ uri: p.uri }} style={styles.photoThumb} />
-                {p.uploading ? (
-                  <View style={styles.photoOverlay}>
-                    <ActivityIndicator color="#fff" />
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.photoRemove}
-                    onPress={() => removePhoto(p.id)}
-                  >
-                    <IconSymbol name="xmark" size={14} color="#fff" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+          <View style={styles.photoGrid}>
+            {photos.map((p) => {
+              const slotStyle =
+                photos.length === 1
+                  ? styles.photoSlotFull
+                  : photos.length === 2
+                  ? styles.photoSlotHalf
+                  : styles.photoSlotGrid;
+              return (
+                <View key={p.id} style={slotStyle}>
+                  <Image source={{ uri: p.uri }} style={styles.photoThumb} resizeMode="cover" />
+                  {p.uploading ? (
+                    <View style={styles.photoOverlay}>
+                      <ActivityIndicator color="#fff" />
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.photoRemove}
+                      onPress={() => removePhoto(p.id)}
+                    >
+                      <IconSymbol name="xmark" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -626,6 +825,7 @@ function SheetTile({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  centerLoader: { alignItems: 'center', justifyContent: 'center' },
   container: { padding: Spacing.lg, paddingBottom: 0 },
   keyboardContainer: { paddingBottom: 120 },
   questionBox: {
@@ -648,8 +848,25 @@ const styles = StyleSheet.create({
     minHeight: 220,
     paddingVertical: Spacing.sm,
   },
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.lg },
-  photoSlot: { width: 84, height: 84, borderRadius: Radii.sm, overflow: 'hidden' },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.lg },
+  photoSlotFull: {
+    width: '100%',
+    height: Math.round((Dimensions.get('window').width - Spacing.lg * 2) * 0.66),
+    borderRadius: Radii.md,
+    overflow: 'hidden',
+  },
+  photoSlotHalf: {
+    width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
+    height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
+    borderRadius: Radii.md,
+    overflow: 'hidden',
+  },
+  photoSlotGrid: {
+    width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
+    height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
+    borderRadius: Radii.md,
+    overflow: 'hidden',
+  },
   photoThumb: { width: '100%', height: '100%' },
   photoOverlay: {
     ...StyleSheet.absoluteFillObject,
