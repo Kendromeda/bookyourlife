@@ -482,6 +482,20 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
   const bottomGap = keyboardVisible ? Spacing.sm : Spacing.lg + insets.bottom;
 
+  if (isEditMode && entryQuery.isError) {
+    return (
+      <View style={[styles.flex, styles.centerLoader, styles.loadError]}>
+        <Text style={[styles.loadErrorText, { color: c.muted }]}>Failed to load entry.</Text>
+        <TouchableOpacity
+          onPress={() => entryQuery.refetch()}
+          style={[styles.loadErrorBtn, { backgroundColor: c.surface, borderColor: c.border }]}
+        >
+          <Text style={[styles.loadErrorBtnText, { color: c.text }]}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (editPending) {
     return (
       <View style={[styles.flex, styles.centerLoader]}>
@@ -826,6 +840,15 @@ function SheetTile({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centerLoader: { alignItems: 'center', justifyContent: 'center' },
+  loadError: { padding: Spacing.xl },
+  loadErrorText: { fontSize: 14, textAlign: 'center', marginBottom: Spacing.md },
+  loadErrorBtn: {
+    borderWidth: 1,
+    borderRadius: Radii.pill,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  loadErrorBtnText: { fontSize: 14, fontWeight: '600' },
   container: { padding: Spacing.lg, paddingBottom: 0 },
   keyboardContainer: { paddingBottom: 120 },
   questionBox: {

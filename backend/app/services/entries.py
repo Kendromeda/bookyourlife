@@ -175,7 +175,7 @@ async def create_entry(
     await session.commit()
     # Trigger transcription asynchronously after commit
     if audio_records:
-        from app.tasks.transcribe import transcribe_audio_task  # local import to avoid cycle
+        from app.tasks.transcribe import transcribe_audio_task  # noqa: PLC0415
 
         await session.refresh(entry, attribute_names=["audios"])
         for record in entry.audios:
@@ -240,7 +240,7 @@ async def update_entry(
     await session.commit()
 
     if new_audio_keys:
-        from app.tasks.transcribe import transcribe_audio_task  # local import
+        from app.tasks.transcribe import transcribe_audio_task  # noqa: PLC0415
 
         await session.refresh(entry, attribute_names=["audios"])
         keys_to_enqueue = set(new_audio_keys)

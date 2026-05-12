@@ -153,6 +153,15 @@ export default function TodayScreen() {
         <View style={styles.loadingCard}>
           <ActivityIndicator color={c.accent} />
         </View>
+      ) : todayQuery.isError ? (
+        <View style={[styles.questionError, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.questionErrorText, { color: c.muted }]}>
+            Daily question could not load.
+          </Text>
+          <TouchableOpacity onPress={() => todayQuery.refetch()} style={styles.questionRetry}>
+            <Text style={[styles.questionRetryText, { color: c.text }]}>Try again</Text>
+          </TouchableOpacity>
+        </View>
       ) : todayQuery.data ? (
         <View style={{ marginTop: Spacing.lg }}>
           <QuestionCard question={todayQuery.data} onAnswer={onAnswer} onSkip={(q) => skip.mutate(q)} />
@@ -202,6 +211,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '700' },
   subtitle: { fontSize: 13, marginTop: 2 },
   loadingCard: { paddingVertical: Spacing.xl },
+  questionError: {
+    marginTop: Spacing.lg,
+    borderWidth: 1,
+    borderRadius: Radii.md,
+    padding: Spacing.lg,
+  },
+  questionErrorText: { fontSize: 14, lineHeight: 20 },
+  questionRetry: { marginTop: Spacing.sm, alignSelf: 'flex-start' },
+  questionRetryText: { fontSize: 14, fontWeight: '600' },
   fab: {
     position: 'absolute',
     right: Spacing.lg,

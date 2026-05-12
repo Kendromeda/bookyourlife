@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
 from uuid import UUID
 
 import structlog
@@ -25,11 +26,11 @@ logger = structlog.get_logger()
 async def list_entries(
     user: CurrentUser,
     session: SessionDep,
-    limit: int = Query(20, ge=1, le=100),
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: datetime | None = None,
-    on_date: date | None = Query(default=None, alias="date"),
-    date_from: datetime | None = Query(default=None, alias="from"),
-    date_to: datetime | None = Query(default=None, alias="to"),
+    on_date: Annotated[date | None, Query(alias="date")] = None,
+    date_from: Annotated[datetime | None, Query(alias="from")] = None,
+    date_to: Annotated[datetime | None, Query(alias="to")] = None,
 ) -> EntryListOut:
     # Caller may either pass an explicit [from, to) ISO range (preferred —
     # lets client align to local-time day boundary) or a single `date`

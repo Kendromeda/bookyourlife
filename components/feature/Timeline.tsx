@@ -128,6 +128,16 @@ export function Timeline({
           <View style={styles.center}>
             <ActivityIndicator color={c.accent} />
           </View>
+        ) : query.isError ? (
+          <View style={styles.center}>
+            <Text style={[styles.empty, { color: c.muted }]}>Failed to load entries.</Text>
+            <TouchableOpacity
+              onPress={() => query.refetch()}
+              style={[styles.retryBtn, { backgroundColor: c.surface, borderColor: c.border }]}
+            >
+              <Text style={[styles.retryLabel, { color: c.text }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.center}>
             <Text style={[styles.empty, { color: c.muted }]}>
@@ -155,4 +165,12 @@ const styles = StyleSheet.create({
   body: { fontSize: 15, lineHeight: 22 },
   center: { paddingVertical: Spacing.xxl, paddingHorizontal: Spacing.xl, alignItems: 'center' },
   empty: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  retryBtn: {
+    marginTop: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radii.pill,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  retryLabel: { fontSize: 14, fontWeight: '600' },
 });
