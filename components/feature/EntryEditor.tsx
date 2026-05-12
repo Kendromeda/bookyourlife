@@ -131,6 +131,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const [aiOpen, setAiOpen] = useState(false);
   const [audioRecorderVisible, setAudioRecorderVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [prefilled, setPrefilled] = useState(false);
   const [writtenAt, setWrittenAt] = useState<string | null>(initialWrittenAt ?? null);
   const [isDirty, setIsDirty] = useState(false);
@@ -472,15 +473,26 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   }, [submit.isPending, onSubmittingChange]);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    const show = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardVisible(true);
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
 
-  const bottomGap = keyboardVisible ? Spacing.sm : Spacing.lg + insets.bottom;
+  const bottomGap =
+    keyboardVisible && Platform.OS === 'android'
+      ? keyboardHeight + Spacing.sm
+      : keyboardVisible
+      ? Spacing.sm
+      : Spacing.lg + insets.bottom;
 
   if (isEditMode && entryQuery.isError) {
     return (
