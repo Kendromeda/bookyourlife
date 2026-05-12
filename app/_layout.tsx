@@ -5,6 +5,7 @@ import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import 'react-native-reanimated';
@@ -97,12 +98,14 @@ function AppShell() {
 
 export default function RootLayout() {
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <QueryClientProvider client={queryClient}>
-          <AppShell />
-        </QueryClientProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <QueryClientProvider client={queryClient}>
+            <AppShell />
+          </QueryClientProvider>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }
