@@ -235,7 +235,6 @@ def _to_out(entry) -> EntryOut:  # type: ignore[no-untyped-def]
                 "id": a.id,
                 "storage_key": storage.public_url(a.storage_key) if storage else a.storage_key,
                 "duration_seconds": a.duration_seconds,
-                "transcript": a.transcript,
                 "position": a.position,
             }
             for a in (entry.audios or [])

@@ -2,15 +2,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-import structlog
 from sqlalchemy import desc, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.entry import Entry, EntryAudio, EntryPhoto, EntryVideo
-
-logger = structlog.get_logger()
 
 
 @dataclass
@@ -161,33 +158,17 @@ async def create_entry(
             )
         )
 
-    audio_records: list[EntryAudio] = []
     for index, audio in enumerate(audio_attachments):
-        record = EntryAudio(
-            entry_id=entry.id,
-            storage_key=audio.storage_key,
-            duration_seconds=audio.duration_seconds,
-            position=index,
+        session.add(
+            EntryAudio(
+                entry_id=entry.id,
+                storage_key=audio.storage_key,
+                duration_seconds=audio.duration_seconds,
+                position=index,
+            )
         )
-        session.add(record)
-        audio_records.append(record)
 
     await session.commit()
-    # Trigger transcription asynchronously after commit
-    if audio_records:
-        from app.tasks.transcribe import transcribe_audio_task  # noqa: PLC0415
-
-        await session.refresh(entry, attribute_names=["audios"])
-        for record in entry.audios:
-            try:
-                transcribe_audio_task.delay(str(record.id))
-            except Exception as exc:
-                logger.warning(
-                    "transcribe enqueue failed",
-                    audio_id=str(record.id),
-                    error=str(exc),
-                )
-
     return await get_entry(session, user_id=user_id, entry_id=entry.id)
 
 
@@ -235,27 +216,9 @@ async def update_entry(
 
     _diff_photos(entry, photos)
     _diff_videos(entry, videos)
-    new_audio_keys = _diff_audios(entry, audios)
+    _diff_audios(entry, audios)
 
     await session.commit()
-
-    if new_audio_keys:
-        from app.tasks.transcribe import transcribe_audio_task  # noqa: PLC0415
-
-        await session.refresh(entry, attribute_names=["audios"])
-        keys_to_enqueue = set(new_audio_keys)
-        for record in entry.audios:
-            if record.storage_key not in keys_to_enqueue:
-                continue
-            try:
-                transcribe_audio_task.delay(str(record.id))
-            except Exception as exc:
-                logger.warning(
-                    "transcribe enqueue failed",
-                    audio_id=str(record.id),
-                    error=str(exc),
-                )
-
     return await get_entry(session, user_id=user_id, entry_id=entry_id)
 
 
@@ -302,15 +265,9 @@ def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> None:
             entry.videos.remove(video)
 
 
-def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
-    """Returns storage_keys of newly-created audio records.
-
-    Storage keys are unique per upload (R2 path with uuid hex) so they're
-    a stable handle to find the audios after commit assigns DB IDs.
-    """
+def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> None:
     existing_by_id = {a.id: a for a in entry.audios}
     keep_ids: set[UUID] = set()
-    new_keys: list[str] = []
 
     for index, item in enumerate(items):
         if item.id is not None and item.id in existing_by_id:
@@ -324,13 +281,10 @@ def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
                 position=index,
             )
             entry.audios.append(new_audio)
-            new_keys.append(item.storage_key)
 
     for audio in list(entry.audios):
         if audio.id not in keep_ids and audio.id in existing_by_id:
             entry.audios.remove(audio)
-
-    return new_keys
 
 
 async def delete_entry(session: AsyncSession, *, user_id: UUID, entry_id: UUID) -> None:

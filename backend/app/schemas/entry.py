@@ -27,7 +27,6 @@ class EntryAudioOut(BaseModel):
     id: UUID
     storage_key: str
     duration_seconds: int | None = None
-    transcript: str | None = None
     position: int
 
 

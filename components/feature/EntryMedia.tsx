@@ -173,13 +173,7 @@ function AudioPlayer({ audio }: { audio: EntryAudio }) {
         <Text style={[styles.audioLabel, { color: c.text }]}>Voice note</Text>
         <Text style={[styles.audioMeta, { color: c.muted }]} numberOfLines={1}>
           {playing ? `${formatDuration(current)} / ${formatDuration(duration)}` : formatDuration(duration)}
-          {audio.transcript ? ' · transcribed' : ''}
         </Text>
-        {audio.transcript ? (
-          <Text style={[styles.audioTranscript, { color: c.textSoft }]} numberOfLines={3}>
-            {audio.transcript}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -220,5 +214,4 @@ const styles = StyleSheet.create({
   },
   audioLabel: { fontSize: 14, fontWeight: '500' },
   audioMeta: { fontSize: 12, marginTop: 2 },
-  audioTranscript: { fontSize: 13, marginTop: Spacing.xs, lineHeight: 18, fontStyle: 'italic' },
 });

@@ -183,7 +183,6 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         uploading: false,
         storage_key: a.storage_key,
         existing_id: a.id,
-        transcript: a.transcript,
       })),
     );
     setPrefilled(true);

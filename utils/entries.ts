@@ -11,7 +11,6 @@ export type EntryAudio = {
   id: string;
   storage_key: string;
   duration_seconds: number | null;
-  transcript: string | null;
   position: number;
 };
 

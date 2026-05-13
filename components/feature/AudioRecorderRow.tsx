@@ -21,7 +21,6 @@ export type RecordedClip = {
   uploading: boolean;
   storage_key: string | null;
   existing_id?: string;
-  transcript?: string | null;
 };
 
 export type AudioRecorderRowProps = {
