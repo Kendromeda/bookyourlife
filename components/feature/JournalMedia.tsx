@@ -6,10 +6,12 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EntryListPage, fetchEntries } from '@/utils/entries';
+import { useTranslation } from '@/utils/i18n';
 
 export function JournalMedia() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const { t } = useTranslation();
 
   const query = useInfiniteQuery<EntryListPage>({
     queryKey: ['entries', 'all'],
@@ -44,9 +46,9 @@ export function JournalMedia() {
     return (
       <View style={styles.center}>
         <IconSymbol name="photo" size={48} color={c.muted} />
-        <Text style={[styles.emptyTitle, { color: c.text }]}>Empty Media</Text>
+        <Text style={[styles.emptyTitle, { color: c.text }]}>{t('journal.mediaEmptyTitle')}</Text>
         <Text style={[styles.emptySub, { color: c.muted }]}>
-          Media will appear here when added to your journal
+          {t('journal.mediaEmptySub')}
         </Text>
       </View>
     );

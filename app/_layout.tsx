@@ -14,6 +14,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { queryClient } from '@/utils/queryClient';
 import { setApiTokenGetter } from '@/utils/api';
 import { ensurePushRegistered } from '@/utils/fcm';
+import { I18nProvider } from '@/utils/i18n';
+import { fetchMe, LanguageCode, Me } from '@/utils/users';
+import { useQuery } from '@tanstack/react-query';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -77,22 +80,38 @@ function usePushLifecycle() {
   }, [router]);
 }
 
+function useActiveLanguage(): LanguageCode {
+  const { isSignedIn } = useAuth();
+  const meQuery = useQuery<Me>({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    enabled: !!isSignedIn,
+    staleTime: 60_000,
+  });
+  return meQuery.data?.preferred_language ?? 'en';
+}
+
 function AppShell() {
   const colorScheme = useColorScheme();
+  const lang = useActiveLanguage();
   useAuthGate();
   usePushLifecycle();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
-        <Stack.Screen name="prompt-pack" options={{ headerShown: false }} />
-        <Stack.Screen name="book" options={{ headerShown: false }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <I18nProvider lang={lang}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="prompt-pack" options={{ headerShown: false }} />
+          <Stack.Screen name="book" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 

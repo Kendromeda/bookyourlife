@@ -8,11 +8,13 @@ import { Colors, Radii, Spacing } from '@/constants/theme';
 import { getPromptPacks } from '@/constants/prompts';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchMe, Me } from '@/utils/users';
+import { useTranslation } from '@/utils/i18n';
 
 export default function PromptPackScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
   const pack = getPromptPacks(meQuery.data?.preferred_language).find((p) => p.id === id);
@@ -21,7 +23,7 @@ export default function PromptPackScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={['top']}>
         <View style={styles.center}>
-          <Text style={{ color: c.text }}>Pack not found</Text>
+          <Text style={{ color: c.text }}>{t('prompts.packNotFound')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -41,7 +43,7 @@ export default function PromptPackScreen() {
         </View>
         <Text style={[styles.title, { color: c.text }]}>{pack.title}</Text>
         <Text style={[styles.meta, { color: c.muted }]}>
-          {pack.prompts.length} Prompts · Book Your Life
+          {t('prompts.packMeta', { count: pack.prompts.length })} · Book Your Life
         </Text>
         <Text style={[styles.desc, { color: c.muted }]}>{pack.description}</Text>
 

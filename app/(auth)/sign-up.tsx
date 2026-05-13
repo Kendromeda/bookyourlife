@@ -4,13 +4,16 @@ import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors, Radii, Spacing } from '@/constants/theme';
+import { RibbonMark } from '@/components/ui/Ribbon';
+import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/utils/i18n';
 
 export default function SignUpScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const { signUp, setActive, isLoaded } = useSignUp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,13 +56,18 @@ export default function SignUpScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <View style={styles.container}>
-          <Text style={[styles.title, { color: c.text }]}>Create account</Text>
+          <View style={styles.brand}>
+            <RibbonMark size={28} inkColor={c.text} accentColor={c.accent} backgroundColor={c.background} />
+          </View>
+          <Text style={[styles.title, { color: c.text, fontFamily: Type.serif }]}>
+            {t('auth.signUp.title')}
+          </Text>
 
           {!pendingVerification ? (
             <>
               <TextInput
-                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-                placeholder="Email"
+                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.paper, fontFamily: Type.serif }]}
+                placeholder={t('auth.signIn.email')}
                 placeholderTextColor={c.muted}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -67,8 +75,8 @@ export default function SignUpScreen() {
                 onChangeText={setEmail}
               />
               <TextInput
-                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-                placeholder="Password"
+                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.paper, fontFamily: Type.serif }]}
+                placeholder={t('auth.signIn.password')}
                 placeholderTextColor={c.muted}
                 secureTextEntry
                 value={password}
@@ -76,21 +84,33 @@ export default function SignUpScreen() {
               />
               {error && <Text style={[styles.error, { color: c.danger }]}>{error}</Text>}
               <TouchableOpacity
-                style={[styles.primary, { backgroundColor: c.accent, opacity: busy ? 0.6 : 1 }]}
+                style={[styles.primary, { backgroundColor: c.text, opacity: busy ? 0.6 : 1 }]}
                 onPress={submit}
                 disabled={busy || !isLoaded}
+                activeOpacity={0.9}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryLabel}>Create account</Text>}
+                {busy ? (
+                  <ActivityIndicator color={c.background} />
+                ) : (
+                  <Text style={[styles.primaryLabel, { color: c.background }]}>
+                    {t('auth.signUp.button')}
+                  </Text>
+                )}
               </TouchableOpacity>
             </>
           ) : (
             <>
-              <Text style={[styles.hint, { color: c.textSoft }]}>
-                Enter the verification code sent to {email}
+              <Text
+                style={[
+                  styles.hint,
+                  { color: c.textSoft, fontFamily: Type.italic, fontStyle: 'italic' },
+                ]}
+              >
+                {t('auth.signUp.verifyHint', { email })}
               </Text>
               <TextInput
-                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-                placeholder="Verification code"
+                style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.paper, fontFamily: Type.serif }]}
+                placeholder={t('auth.signUp.code')}
                 placeholderTextColor={c.muted}
                 keyboardType="number-pad"
                 value={code}
@@ -98,17 +118,24 @@ export default function SignUpScreen() {
               />
               {error && <Text style={[styles.error, { color: c.danger }]}>{error}</Text>}
               <TouchableOpacity
-                style={[styles.primary, { backgroundColor: c.accent, opacity: busy ? 0.6 : 1 }]}
+                style={[styles.primary, { backgroundColor: c.text, opacity: busy ? 0.6 : 1 }]}
                 onPress={verify}
                 disabled={busy || !isLoaded}
+                activeOpacity={0.9}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryLabel}>Verify</Text>}
+                {busy ? (
+                  <ActivityIndicator color={c.background} />
+                ) : (
+                  <Text style={[styles.primaryLabel, { color: c.background }]}>
+                    {t('auth.signUp.verify')}
+                  </Text>
+                )}
               </TouchableOpacity>
             </>
           )}
 
           <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
-            <Text style={[styles.toggle, { color: c.accentDark }]}>Already have an account? Sign in</Text>
+            <Text style={[styles.toggle, { color: c.accentDark }]}>{t('auth.signUp.toggle')}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -120,11 +147,12 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
   container: { flex: 1, paddingHorizontal: Spacing.xl, justifyContent: 'center' },
-  title: { fontSize: 36, fontWeight: '700', marginBottom: Spacing.xxl },
-  hint: { fontSize: 14, marginBottom: Spacing.lg, lineHeight: 20 },
-  input: { borderWidth: 1, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: 16, marginBottom: Spacing.md },
+  brand: { alignItems: 'center', marginBottom: Spacing.lg },
+  title: { fontSize: 32, fontWeight: '500', letterSpacing: -0.5, textAlign: 'center', marginBottom: Spacing.xxl },
+  hint: { fontSize: 16, marginBottom: Spacing.lg, lineHeight: 24, textAlign: 'center' },
+  input: { borderWidth: 1, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: 17, marginBottom: Spacing.md },
   error: { marginBottom: Spacing.md, fontSize: 14 },
-  primary: { borderRadius: Radii.md, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
-  primaryLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  primary: { borderRadius: 999, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
+  primaryLabel: { fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
   toggle: { textAlign: 'center', marginTop: Spacing.xl, fontSize: 14 },
 });

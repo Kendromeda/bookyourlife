@@ -43,3 +43,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Claude Design handoff bundles (local scratch)
+.tmp-design/

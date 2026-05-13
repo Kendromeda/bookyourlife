@@ -4,12 +4,16 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ProgressBar } from '@/components/feature/ProgressBar';
 import { QuestionCard } from '@/components/feature/QuestionCard';
 import { Timeline } from '@/components/feature/Timeline';
+import { Eyebrow } from '@/components/ui/Ribbon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radii, Spacing } from '@/constants/theme';
+import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchTodayQuestion, Question, skipQuestion } from '@/utils/entries';
+import { useTranslation } from '@/utils/i18n';
+import { fetchStats, UserStats } from '@/utils/users';
 
 /**
  * Day boundaries are computed in the device's local timezone. Backend
@@ -28,7 +32,11 @@ function addDays(d: Date, days: number): Date {
   return next;
 }
 
-function describeDate(d: Date, today: Date): { heading: string; sub: string } {
+function describeDate(
+  d: Date,
+  today: Date,
+  labels: { today: string; yesterday: string; tomorrow: string },
+): { heading: string; sub: string } {
   const diffDays = Math.round(
     (d.getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
   );
@@ -38,9 +46,9 @@ function describeDate(d: Date, today: Date): { heading: string; sub: string } {
     day: 'numeric',
     year: 'numeric',
   });
-  if (diffDays === 0) return { heading: 'Today', sub: full };
-  if (diffDays === -1) return { heading: 'Yesterday', sub: full };
-  if (diffDays === 1) return { heading: 'Tomorrow', sub: full };
+  if (diffDays === 0) return { heading: labels.today, sub: full };
+  if (diffDays === -1) return { heading: labels.yesterday, sub: full };
+  if (diffDays === 1) return { heading: labels.tomorrow, sub: full };
   const short = d.toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
@@ -54,6 +62,13 @@ export default function TodayScreen() {
   const c = Colors[scheme];
   const router = useRouter();
   const qc = useQueryClient();
+  const { t } = useTranslation();
+
+  const statsQuery = useQuery<UserStats>({
+    queryKey: ['stats'],
+    queryFn: fetchStats,
+    staleTime: 60_000,
+  });
 
   const [today, setToday] = useState<Date>(() => startOfLocalDay(new Date()));
   const [activeDate, setActiveDate] = useState<Date>(today);
@@ -114,7 +129,11 @@ export default function TodayScreen() {
   const dayStart = activeDate;
   const dayEnd = addDays(activeDate, 1);
 
-  const { heading, sub } = describeDate(activeDate, today);
+  const { heading, sub } = describeDate(activeDate, today, {
+    today: t('today.heading'),
+    yesterday: t('today.yesterday'),
+    tomorrow: t('today.tomorrow'),
+  });
 
   const header = (
     <View style={styles.headerWrap}>
@@ -128,8 +147,8 @@ export default function TodayScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity onPress={goToday} activeOpacity={0.7} style={styles.dateTitleCenter}>
-          <Text style={[styles.title, { color: c.text }]}>{heading}</Text>
-          <Text style={[styles.subtitle, { color: c.muted }]}>{sub}</Text>
+          <Eyebrow>{sub.split(',')[0]}</Eyebrow>
+          <Text style={[styles.title, { color: c.text, fontFamily: Type.serif }]}>{heading}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -149,6 +168,8 @@ export default function TodayScreen() {
         </TouchableOpacity>
       </View>
 
+      {statsQuery.data && <ProgressBar stats={statsQuery.data} />}
+
       {isToday && (todayQuery.isLoading ? (
         <View style={styles.loadingCard}>
           <ActivityIndicator color={c.accent} />
@@ -156,10 +177,10 @@ export default function TodayScreen() {
       ) : todayQuery.isError ? (
         <View style={[styles.questionError, { backgroundColor: c.surface, borderColor: c.border }]}>
           <Text style={[styles.questionErrorText, { color: c.muted }]}>
-            Daily question could not load.
+            {t('today.questionLoadError')}
           </Text>
           <TouchableOpacity onPress={() => todayQuery.refetch()} style={styles.questionRetry}>
-            <Text style={[styles.questionRetryText, { color: c.text }]}>Try again</Text>
+            <Text style={[styles.questionRetryText, { color: c.text }]}>{t('common.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       ) : todayQuery.data ? (
@@ -176,7 +197,7 @@ export default function TodayScreen() {
         ListHeaderComponent={header}
         fromIso={isToday ? undefined : dayStart.toISOString()}
         toIso={isToday ? undefined : dayEnd.toISOString()}
-        emptyLabel={isToday ? undefined : 'No entries on this day yet.'}
+        emptyLabel={isToday ? t('today.timelineEmpty') : t('today.emptyDay')}
       />
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: c.accent }]}
@@ -184,7 +205,7 @@ export default function TodayScreen() {
         activeOpacity={0.85}
       >
         <IconSymbol name="plus" size={20} color="#fff" />
-        <Text style={styles.fabLabel}>New entry</Text>
+        <Text style={styles.fabLabel}>{t('today.newEntry')}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -208,7 +229,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: 28, fontWeight: '700' },
+  title: { fontSize: 26, fontWeight: '500', letterSpacing: -0.4, marginTop: 2 },
   subtitle: { fontSize: 13, marginTop: 2 },
   loadingCard: { paddingVertical: Spacing.xl },
   questionError: {

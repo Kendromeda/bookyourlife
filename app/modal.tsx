@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EntryNeighbors, fetchEntryNeighbors } from '@/utils/entries';
+import { useTranslation } from '@/utils/i18n';
 
 function formatDate(iso: string | null | undefined): string {
   const d = iso ? new Date(iso) : new Date();
@@ -28,6 +29,7 @@ export default function EntryModal() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{
     questionId?: string;
     questionText?: string;
@@ -71,19 +73,19 @@ export default function EntryModal() {
         return;
       }
       Alert.alert(
-        'Discard unsaved changes?',
-        'Your edits to this entry will be lost.',
+        t('modal.discardTitle'),
+        t('modal.discardMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Discard',
+            text: t('common.discard'),
             style: 'destructive',
             onPress: () => navigateToEntry(targetId),
           },
         ],
       );
     },
-    [isDirty, navigateToEntry],
+    [isDirty, navigateToEntry, t],
   );
 
   const goOlder = () => {
@@ -111,12 +113,12 @@ export default function EntryModal() {
 
   const confirmDelete = () => {
     Alert.alert(
-      'Delete entry?',
-      'This cannot be undone.',
+      t('modal.deleteTitle'),
+      t('modal.deleteMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => editorRef.current?.delete(),
         },

@@ -41,6 +41,7 @@ import {
   uploadPhoto,
   uploadVideo,
 } from '@/utils/entries';
+import { useTranslation } from '@/utils/i18n';
 import { CapturedLocation, captureCurrentLocation } from '@/utils/location';
 
 const MAX_PHOTOS = 5;
@@ -117,6 +118,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { t } = useTranslation();
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -220,7 +222,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError(fromCamera ? 'Camera permission required.' : 'Photo permission required.');
+      setError(fromCamera ? t('editor.error.cameraPermission') : t('editor.error.photoPermission'));
       return;
     }
     const result = fromCamera
@@ -240,7 +242,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         ),
       );
     } catch (e: any) {
-      setError(e?.message ?? 'Photo upload failed');
+      setError(e?.message ?? t('editor.error.photoUploadFailed'));
       setPhotos((p) => p.filter((existing) => existing.id !== photoId));
     }
   };
@@ -251,9 +253,9 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     try {
       const loc = await captureCurrentLocation();
       if (loc) setLocation(loc);
-      else setError('Location permission was denied.');
+      else setError(t('editor.error.locationPermission'));
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to get location');
+      setError(e?.message ?? t('editor.error.locationFailed'));
     } finally {
       setLocating(false);
     }
@@ -266,12 +268,12 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const pickVideo = async () => {
     setMoreOpen(false);
     if (videos.length >= MAX_VIDEOS) {
-      setError(`Only ${MAX_VIDEOS} video allowed per entry.`);
+      setError(t('editor.error.maxVideos', { max: MAX_VIDEOS }));
       return;
     }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Photo library permission required.');
+      setError(t('editor.error.photoPermission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -298,7 +300,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         ),
       );
     } catch (e: any) {
-      setError(e?.message ?? 'Video upload failed');
+      setError(e?.message ?? t('editor.error.videoUploadFailed'));
       setVideos((v) => v.filter((existing) => existing.id !== id));
     }
   };
@@ -309,7 +311,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
   const onAudioCaptured = async (uri: string, duration: number) => {
     if (audios.length >= MAX_AUDIOS) {
-      setError(`Maximum ${MAX_AUDIOS} voice notes per entry.`);
+      setError(t('editor.error.maxAudios', { max: MAX_AUDIOS }));
       return;
     }
     const id = makeId();
@@ -328,7 +330,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         ),
       );
     } catch (e: any) {
-      setError(e?.message ?? 'Audio upload failed');
+      setError(e?.message ?? t('editor.error.audioUploadFailed'));
       setAudios((a) => a.filter((existing) => existing.id !== id));
     }
   };
@@ -415,6 +417,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] });
       qc.invalidateQueries({ queryKey: ['questions', 'today'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
       if (entryId) {
         qc.invalidateQueries({ queryKey: ['entry', entryId] });
         // Neighbor entries may carry a snapshot of this entry's data.
@@ -423,7 +426,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       setIsDirty(false);
       onDone();
     },
-    onError: (e: any) => setError(e?.message ?? 'Failed to save entry'),
+    onError: (e: any) => setError(e?.message ?? t('editor.error.saveFailed')),
   });
 
   const deleteMutation = useMutation({
@@ -434,11 +437,12 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] });
       qc.invalidateQueries({ queryKey: ['entry', entryId] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
       // Any neighbor cache that referenced this entry is now stale.
       qc.invalidateQueries({ queryKey: ['entry-neighbors'] });
       onDone();
     },
-    onError: (e: any) => setError(e?.message ?? 'Failed to delete entry'),
+    onError: (e: any) => setError(e?.message ?? t('editor.error.deleteFailed')),
   });
 
   const hasContent =
@@ -520,14 +524,14 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       >
         {questionText && (
           <View style={[styles.questionBox, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={[styles.questionEyebrow, { color: c.accentDark }]}>Answering</Text>
+            <Text style={[styles.questionEyebrow, { color: c.accentDark }]}>{t('editor.answering')}</Text>
             <Text style={[styles.questionText, { color: c.text }]}>{questionText}</Text>
           </View>
         )}
 
         <TextInput
           style={[styles.titleInput, { color: c.text }]}
-          placeholder="Title (optional)"
+          placeholder={t('editor.titlePlaceholder')}
           placeholderTextColor={c.muted}
           value={title}
           onChangeText={setTitle}
@@ -535,7 +539,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
         <TextInput
           style={[styles.bodyInput, { color: c.text }]}
-          placeholder="Start writing..."
+          placeholder={t('editor.bodyPlaceholder')}
           placeholderTextColor={c.muted}
           value={body}
           onChangeText={setBody}
@@ -602,7 +606,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         >
           <IconSymbol name="location.fill" size={14} color={c.accent} />
           {locating ? (
-            <Text style={[styles.metaText, { color: c.muted }]}>Locating…</Text>
+            <Text style={[styles.metaText, { color: c.muted }]}>{t('editor.locating')}</Text>
           ) : location ? (
             <Text style={[styles.metaText, { color: c.text }]} numberOfLines={1}>
               {location.place_name ?? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
@@ -629,7 +633,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       >
         <ToolbarBtn
           icon="photo.stack"
-          label="Photos"
+          label={t('editor.toolbar.photos')}
           onPress={() => pickPhoto(false)}
           color={c.accent}
           textColor={c.text}
@@ -637,15 +641,15 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         <ToolbarDivider color={c.border} />
         <ToolbarBtn
           icon="doc.text.fill"
-          label="Templates"
-          onPress={() => setError('Templates coming soon')}
+          label={t('editor.toolbar.templates')}
+          onPress={() => setError(t('editor.error.templatesSoon'))}
           color={c.muted}
           textColor={c.text}
         />
         <ToolbarDivider color={c.border} />
         <ToolbarBtn
           icon="sparkles"
-          label="AI"
+          label={t('editor.toolbar.ai')}
           onPress={() => setAiOpen(true)}
           color={c.accent}
           textColor={c.text}
@@ -654,7 +658,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         <ToolbarDivider color={c.border} />
         <ToolbarBtn
           icon="ellipsis"
-          label="More…"
+          label={t('editor.toolbar.more')}
           onPress={() => setMoreOpen(true)}
           color={c.muted}
           textColor={c.text}
@@ -663,50 +667,50 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
 
       {/* More sheet */}
       <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)}>
-        <Text style={[styles.sheetTitle, { color: c.text }]}>Add to entry</Text>
+        <Text style={[styles.sheetTitle, { color: c.text }]}>{t('editor.sheet.addToEntry')}</Text>
         <View style={styles.sheetGrid}>
           <SheetTile
             icon="mic.fill"
-            label="Audio"
+            label={t('editor.sheet.audio')}
             onPress={() => {
               setMoreOpen(false);
               if (audios.length >= MAX_AUDIOS) {
-                setError(`Maximum ${MAX_AUDIOS} voice notes per entry.`);
+                setError(t('editor.error.maxAudios', { max: MAX_AUDIOS }));
                 return;
               }
               setAudioRecorderVisible(true);
             }}
           />
-          <SheetTile icon="location.fill" label="Location" onPress={grabLocation} />
+          <SheetTile icon="location.fill" label={t('editor.sheet.location')} onPress={grabLocation} />
           <SheetTile
             icon="tag.fill"
-            label="Tag"
+            label={t('editor.sheet.tag')}
             onPress={() => {
               setMoreOpen(false);
-              setError('Tags coming soon');
+              setError(t('editor.error.tagsSoon'));
             }}
           />
-          <SheetTile icon="camera.fill" label="Camera" onPress={() => pickPhoto(true)} />
+          <SheetTile icon="camera.fill" label={t('editor.sheet.camera')} onPress={() => pickPhoto(true)} />
           <SheetTile
             icon="doc.fill"
-            label="File"
+            label={t('editor.sheet.file')}
             star
             onPress={() => {
               setMoreOpen(false);
-              setError('Files coming soon');
+              setError(t('editor.error.filesSoon'));
             }}
           />
-          <SheetTile icon="video.fill" label="Video" onPress={pickVideo} />
+          <SheetTile icon="video.fill" label={t('editor.sheet.video')} onPress={pickVideo} />
         </View>
       </BottomSheet>
 
       {/* AI sheet */}
       <BottomSheet open={aiOpen} onClose={() => setAiOpen(false)}>
-        <Text style={[styles.sheetTitle, { color: c.text }]}>Journaling Tools</Text>
+        <Text style={[styles.sheetTitle, { color: c.text }]}>{t('editor.aiTools.title')}</Text>
         <View style={styles.sheetGrid}>
           <SheetTile
             icon="wand.and.stars"
-            label="Title Suggestions"
+            label={t('editor.aiTools.titles')}
             onPress={() => {
               setAiOpen(false);
               setActiveAITool('titles');
@@ -714,7 +718,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
           />
           <SheetTile
             icon="sparkles"
-            label="Writing Prompts"
+            label={t('editor.aiTools.prompts')}
             onPress={() => {
               setAiOpen(false);
               setActiveAITool('prompts');
@@ -722,7 +726,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
           />
           <SheetTile
             icon="photo"
-            label="Generate Image"
+            label={t('editor.aiTools.image')}
             onPress={() => {
               setAiOpen(false);
               setActiveAITool('image');
@@ -730,7 +734,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
           />
           <SheetTile
             icon="sparkles"
-            label="Entry Highlights"
+            label={t('editor.aiTools.highlights')}
             onPress={() => {
               setAiOpen(false);
               setActiveAITool('highlights');

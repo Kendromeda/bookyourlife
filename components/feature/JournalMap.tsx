@@ -3,18 +3,18 @@ import { StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/utils/i18n';
 
 export function JournalMap() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const { t } = useTranslation();
 
   return (
     <View style={styles.center}>
       <IconSymbol name="map.fill" size={48} color={c.muted} />
-      <Text style={[styles.title, { color: c.text }]}>Map coming soon</Text>
-      <Text style={[styles.sub, { color: c.muted }]}>
-        Entries will plot on a map once location capture is enabled.
-      </Text>
+      <Text style={[styles.title, { color: c.text }]}>{t('journal.mapSoonTitle')}</Text>
+      <Text style={[styles.sub, { color: c.muted }]}>{t('journal.mapSoonSub')}</Text>
     </View>
   );
 }

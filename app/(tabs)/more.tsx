@@ -1,13 +1,24 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Href, useRouter } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Eyebrow, RibbonMark } from '@/components/ui/Ribbon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radii, Spacing } from '@/constants/theme';
+import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { fetchMe, LANGUAGES, LanguageCode, Me, updateMe } from '@/utils/users';
+import { useTranslation } from '@/utils/i18n';
+import { fetchExport, fetchMe, LANGUAGES, LanguageCode, Me, updateMe } from '@/utils/users';
 
 const NOTIF_HOURS = [6, 7, 8, 9, 10, 12, 18, 20, 21];
 
@@ -17,9 +28,10 @@ type RowProps = {
   detail?: string;
   onPress?: () => void;
   danger?: boolean;
+  trailing?: React.ReactNode;
 };
 
-function Row({ icon, label, detail, onPress, danger }: RowProps) {
+function Row({ icon, label, detail, onPress, danger, trailing }: RowProps) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   return (
@@ -35,7 +47,7 @@ function Row({ icon, label, detail, onPress, danger }: RowProps) {
         <Text style={[styles.rowLabel, { color: danger ? c.danger : c.text }]}>{label}</Text>
         {detail && <Text style={[styles.rowDetail, { color: c.muted }]}>{detail}</Text>}
       </View>
-      {onPress && !danger && <IconSymbol name="chevron.right" size={16} color={c.muted} />}
+      {trailing ? trailing : onPress && !danger && <IconSymbol name="chevron.right" size={16} color={c.muted} />}
     </TouchableOpacity>
   );
 }
@@ -46,6 +58,8 @@ export default function MoreScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { signOut } = useAuth();
+  const { t } = useTranslation();
+  const [exporting, setExporting] = useState(false);
 
   const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
   const updateNotif = useMutation({
@@ -63,41 +77,90 @@ export default function MoreScreen() {
   const me = meQuery.data;
   const displayName = me?.display_name || me?.email || 'You';
 
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const data = await fetchExport();
+      // Try to share via expo-sharing + expo-file-system when available;
+      // fall back to a simple alert with confirmation.
+      let shared = false;
+      try {
+        const FileSystem = await import('expo-file-system/legacy');
+        const Sharing = await import('expo-sharing');
+        const isAvailable = await Sharing.isAvailableAsync();
+        const uri = `${FileSystem.cacheDirectory}${t('export.fileName')}`;
+        await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2), {
+          encoding: 'utf8',
+        });
+        if (isAvailable) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/json' });
+          shared = true;
+        }
+      } catch {
+        // expo-file-system or expo-sharing not available; show alert fallback
+      }
+      if (!shared) {
+        Alert.alert(t('export.success'), t('export.unsupported'));
+      }
+    } catch {
+      Alert.alert(t('export.failed'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={[styles.title, { color: c.text }]}>More</Text>
+        <View style={styles.titleRow}>
+          <Eyebrow>{t('more.signedInAs')}</Eyebrow>
+          <Text style={[styles.title, { color: c.text, fontFamily: Type.serif }]}>
+            {t('more.title')}
+          </Text>
+        </View>
 
         {meQuery.isLoading ? (
           <ActivityIndicator color={c.accent} />
         ) : (
           <>
-            <View style={[styles.profileCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/profile' as Href)}
+              style={[styles.profileCard, { backgroundColor: c.paper, borderColor: c.border }]}
+            >
               <View style={[styles.avatar, { backgroundColor: c.accent }]}>
-                <Text style={styles.avatarLabel}>
+                <Text style={[styles.avatarLabel, { fontFamily: Type.serif }]}>
                   {displayName.slice(0, 1).toUpperCase()}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.profileName, { color: c.text }]}>{displayName}</Text>
+                <Text style={[styles.profileName, { color: c.text, fontFamily: Type.serif }]}>
+                  {displayName}
+                </Text>
                 <Text style={[styles.profileMeta, { color: c.muted }]}>
-                  {me?.subscription_tier === 'premium' ? 'Premium' : 'Free plan'}
+                  {me?.subscription_tier === 'premium' ? t('more.plan.premium') : t('more.plan.free')}
                 </Text>
               </View>
-            </View>
+              <View style={[styles.editPill, { backgroundColor: c.background }]}>
+                <Text style={[styles.editPillLabel, { color: c.accentDark }]}>
+                  EDIT
+                </Text>
+              </View>
+            </TouchableOpacity>
 
-            <Text style={[styles.section, { color: c.muted }]}>YOUR BOOK</Text>
+            <Text style={[styles.section, { color: c.muted }]}>{t('more.section.yourBook')}</Text>
             <Row
               icon="book.fill"
-              label="Generate Book"
-              detail="Turn your entries into a printable book"
+              label={t('more.row.generateBook')}
+              detail={t('more.row.generateBookDetail')}
               onPress={() => router.push('/book' as Href)}
             />
 
-            <Text style={[styles.section, { color: c.muted }]}>PREFERENCES</Text>
+            <Text style={[styles.section, { color: c.muted }]}>{t('more.section.preferences')}</Text>
             <Row
               icon="bell.fill"
-              label="Daily question time"
+              label={t('more.row.notifHour')}
               detail={me ? `${me.notif_hour.toString().padStart(2, '0')}:00` : '—'}
             />
             {me && (
@@ -126,7 +189,7 @@ export default function MoreScreen() {
             )}
             <Row
               icon="globe"
-              label="Language"
+              label={t('more.row.language')}
               detail={
                 LANGUAGES.find((item) => item.code === me?.preferred_language)?.label ?? 'English'
               }
@@ -155,15 +218,42 @@ export default function MoreScreen() {
                 })}
               </View>
             )}
-            <Row icon="paintbrush.fill" label="Appearance" detail="System default" />
+            <Row icon="paintbrush.fill" label={t('more.row.appearance')} detail={t('more.row.appearanceDetail')} />
 
-            <Text style={[styles.section, { color: c.muted }]}>ACCOUNT</Text>
-            <Row icon="person.fill" label="Profile" />
-            <Row icon="lock.fill" label="Privacy" />
-            <Row icon="doc.fill" label="Export data" />
+            <Text style={[styles.section, { color: c.muted }]}>{t('more.section.account')}</Text>
+            <Row
+              icon="person.fill"
+              label={t('more.row.profile')}
+              onPress={() => router.push('/profile' as Href)}
+            />
+            <Row
+              icon="lock.fill"
+              label={t('more.row.privacy')}
+              onPress={() => router.push('/privacy' as Href)}
+            />
+            <Row
+              icon="doc.fill"
+              label={t('more.row.exportData')}
+              onPress={handleExport}
+              trailing={
+                exporting ? <ActivityIndicator color={c.muted} size="small" /> : undefined
+              }
+            />
 
             <Text style={[styles.section, { color: c.muted }]}> </Text>
-            <Row icon="arrow.right" label="Sign out" onPress={() => signOut()} danger />
+            <Row icon="arrow.right" label={t('common.signOut')} onPress={() => signOut()} danger />
+
+            <View style={styles.footer}>
+              <RibbonMark
+                size={20}
+                inkColor={c.muted}
+                accentColor={c.accent}
+                backgroundColor={c.background}
+              />
+              <Text style={[styles.versionLabel, { color: c.muted }]}>
+                Book My Life · v1.0
+              </Text>
+            </View>
           </>
         )}
       </ScrollView>
@@ -174,7 +264,8 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { padding: Spacing.lg, paddingBottom: Spacing.xxl },
-  title: { fontSize: 32, fontWeight: '700', marginBottom: Spacing.lg },
+  titleRow: { alignItems: 'flex-start', marginBottom: Spacing.lg, gap: 4 },
+  title: { fontSize: 30, fontWeight: '500', letterSpacing: -0.5 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,9 +282,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLabel: { color: '#fff', fontSize: 20, fontWeight: '600' },
-  profileName: { fontSize: 17, fontWeight: '600' },
-  profileMeta: { fontSize: 13, marginTop: 2 },
+  avatarLabel: { color: '#fff', fontSize: 22, fontWeight: '500' },
+  profileName: { fontSize: 18, fontWeight: '600', letterSpacing: -0.2 },
+  profileMeta: { fontSize: 12, marginTop: 2 },
+  editPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  editPillLabel: {
+    fontFamily: Type.mono,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: 6,
+  },
+  versionLabel: {
+    fontFamily: Type.mono,
+    fontSize: 9,
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
   section: {
     fontSize: 11,
     fontWeight: '600',

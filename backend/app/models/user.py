@@ -1,4 +1,6 @@
-from sqlalchemy import Integer, String
+from datetime import date
+
+from sqlalchemy import Date, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import Base, TimestampMixin, UUIDMixin
@@ -15,3 +17,6 @@ class User(UUIDMixin, TimestampMixin, Base):
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jakarta", nullable=False)
     preferred_language: Mapped[str] = mapped_column(String(8), default="en", nullable=False)
     subscription_tier: Mapped[str] = mapped_column(String(16), default="free", nullable=False)
+    gender: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    birthday: Mapped[date | None] = mapped_column(Date, nullable=True)
+    journaling_goal: Mapped[str | None] = mapped_column(String(32), nullable=True)

@@ -19,6 +19,7 @@ import {
   pollImageJob,
   startImageGen,
 } from '@/utils/ai';
+import { useTranslation } from '@/utils/i18n';
 
 type AITool = 'titles' | 'prompts' | 'highlights' | 'image';
 
@@ -35,13 +36,6 @@ type Props = {
 const MIN_TEXT_BODY_LENGTH = 50;
 const MIN_IMAGE_BODY_LENGTH = 30;
 
-const toolTitles: Record<AITool, string> = {
-  titles: 'Title suggestions',
-  prompts: 'Writing prompts',
-  highlights: 'Highlights',
-  image: 'AI image',
-};
-
 export function AIToolsSheet({
   visible,
   onClose,
@@ -51,9 +45,17 @@ export function AIToolsSheet({
   onAppendText,
   onAddPhoto,
 }: Props) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<string[]>([]);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+
+  const toolTitles: Record<AITool, string> = {
+    titles: t('editor.aiTools.titles'),
+    prompts: t('editor.aiTools.prompts'),
+    highlights: t('editor.aiTools.highlights'),
+    image: t('editor.aiTools.image'),
+  };
 
   useEffect(() => {
     if (!visible) {
@@ -66,7 +68,7 @@ export function AIToolsSheet({
     const trimmedBody = entryBody.trim();
     const minLength = tool === 'image' ? MIN_IMAGE_BODY_LENGTH : MIN_TEXT_BODY_LENGTH;
     if (trimmedBody.length < minLength) {
-      Alert.alert('Add more detail', `Write at least ${minLength} characters before using this tool.`);
+      Alert.alert(t('common.loading'), t('common.retry'));
       onClose();
       return;
     }
@@ -110,7 +112,10 @@ export function AIToolsSheet({
         }
       } catch (error) {
         if (!cancelled) {
-          Alert.alert('AI tool failed', error instanceof Error ? error.message : 'Please try again.');
+          Alert.alert(
+            t('export.failed'),
+            error instanceof Error ? error.message : t('common.tryAgain'),
+          );
           onClose();
         }
       } finally {
@@ -125,7 +130,7 @@ export function AIToolsSheet({
     return () => {
       cancelled = true;
     };
-  }, [entryBody, onClose, tool, visible]);
+  }, [entryBody, onClose, tool, visible, t]);
 
   const applyTextResult = (item: string) => {
     if (tool === 'titles') {
@@ -151,7 +156,7 @@ export function AIToolsSheet({
           <View style={styles.header}>
             <Text style={styles.title}>{toolTitles[tool]}</Text>
             <Pressable hitSlop={10} onPress={onClose}>
-              <Text style={styles.close}>Close</Text>
+              <Text style={styles.close}>{t('common.done')}</Text>
             </Pressable>
           </View>
 
@@ -164,10 +169,10 @@ export function AIToolsSheet({
               <Image source={{ uri: generatedImage.public_url }} style={styles.image} />
               <View style={styles.actions}>
                 <Pressable style={[styles.button, styles.secondaryButton]} onPress={onClose}>
-                  <Text style={styles.secondaryButtonText}>Discard</Text>
+                  <Text style={styles.secondaryButtonText}>{t('common.discard')}</Text>
                 </Pressable>
                 <Pressable style={[styles.button, styles.primaryButton]} onPress={addPhoto}>
-                  <Text style={styles.primaryButtonText}>Add</Text>
+                  <Text style={styles.primaryButtonText}>{t('common.add')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -180,7 +185,7 @@ export function AIToolsSheet({
                   <Text style={styles.rowText}>{item}</Text>
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.empty}>No results returned.</Text>}
+              ListEmptyComponent={<Text style={styles.empty}>{t('common.tryAgain')}</Text>}
               contentContainerStyle={results.length === 0 ? styles.emptyList : undefined}
             />
           )}

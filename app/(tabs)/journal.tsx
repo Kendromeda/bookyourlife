@@ -10,37 +10,39 @@ import { Timeline } from '@/components/feature/Timeline';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/utils/i18n';
 
 type Tab = 'list' | 'calendar' | 'media' | 'map';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'list', label: 'List' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'media', label: 'Media' },
-  { id: 'map', label: 'Map' },
-];
 
 export default function JournalScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('list');
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'list', label: t('journal.tab.list') },
+    { id: 'calendar', label: t('journal.tab.calendar') },
+    { id: 'media', label: t('journal.tab.media') },
+    { id: 'map', label: t('journal.tab.map') },
+  ];
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={['top']}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: c.text }]}>Journal</Text>
+        <Text style={[styles.title, { color: c.text }]}>{t('journal.title')}</Text>
         <Text style={[styles.year, { color: c.muted }]}>{new Date().getFullYear()}</Text>
       </View>
 
       <View style={[styles.tabBar, { borderBottomColor: c.border }]}>
-        {TABS.map((t) => {
-          const active = tab === t.id;
+        {TABS.map((tabItem) => {
+          const active = tab === tabItem.id;
           return (
             <TouchableOpacity
-              key={t.id}
+              key={tabItem.id}
               style={styles.tabItem}
-              onPress={() => setTab(t.id)}
+              onPress={() => setTab(tabItem.id)}
               activeOpacity={0.7}
             >
               <Text
@@ -49,7 +51,7 @@ export default function JournalScreen() {
                   { color: active ? c.accent : c.muted, fontWeight: active ? '600' : '500' },
                 ]}
               >
-                {t.label}
+                {tabItem.label}
               </Text>
               {active && <View style={[styles.tabUnderline, { backgroundColor: c.accent }]} />}
             </TouchableOpacity>
@@ -70,7 +72,7 @@ export default function JournalScreen() {
         activeOpacity={0.85}
       >
         <IconSymbol name="plus" size={20} color="#fff" />
-        <Text style={styles.fabLabel}>New entry</Text>
+        <Text style={styles.fabLabel}>{t('today.newEntry')}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );

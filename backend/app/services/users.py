@@ -1,6 +1,12 @@
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, date, datetime, timedelta, timezone
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.entry import Entry
 from app.models.user import User
 
 
@@ -21,3 +27,122 @@ async def get_or_create_user(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+def _user_tz(user: User) -> ZoneInfo | timezone:
+    try:
+        return ZoneInfo(user.timezone)
+    except Exception:
+        return UTC
+
+
+async def get_user_stats(session: AsyncSession, *, user: User) -> dict[str, int]:
+    """Compute lightweight stats for the Today screen progress bar.
+
+    All "day" boundaries are computed in the user's local timezone so the
+    streak/active-day math matches what the user sees in the UI.
+    """
+    tz = _user_tz(user)
+    now_local = datetime.now(tz=tz)
+    today_local = now_local.date()
+    cutoff_30 = datetime.combine(
+        today_local - timedelta(days=30),
+        datetime.min.time(),
+        tzinfo=tz,
+    ).astimezone(UTC)
+
+    # Pull all entries' written_at for the user (lightweight: one column).
+    rows = await session.execute(
+        select(Entry.written_at, func.length(Entry.body)).where(Entry.user_id == user.id)
+    )
+    items = list(rows.all())
+
+    entries_last_30_days = 0
+    total_words = 0
+    total_entries = len(items)
+    day_set: set[date] = set()
+
+    for written_at, body_len in items:
+        if written_at.tzinfo is None:
+            written_at = written_at.replace(tzinfo=UTC)
+        local_day = written_at.astimezone(tz).date()
+        day_set.add(local_day)
+        if written_at.astimezone(UTC) >= cutoff_30:
+            entries_last_30_days += 1
+        # body_len is char length, not words; approximate words by /5 (avg English/Indonesian)
+        # but a more honest signal: split on whitespace would require fetching body —
+        # keep the cheap proxy and let the frontend label it "characters" if needed.
+        # Since the planning doc lists words: rough proxy = chars / 5.
+        if body_len:
+            total_words += max(1, body_len // 5)
+
+    # Current streak: count consecutive days ending today (or yesterday if no
+    # entry today yet — we still want to keep the streak alive until the day
+    # actually ends).
+    streak = 0
+    cursor = today_local
+    if cursor in day_set:
+        while cursor in day_set:
+            streak += 1
+            cursor = cursor - timedelta(days=1)
+    else:
+        # Allow grace: if user wrote yesterday but not yet today, streak counts up to yesterday.
+        cursor = today_local - timedelta(days=1)
+        while cursor in day_set:
+            streak += 1
+            cursor = cursor - timedelta(days=1)
+
+    return {
+        "entries_last_30_days": entries_last_30_days,
+        "current_streak_days": streak,
+        "total_entries": total_entries,
+        "total_words": total_words,
+    }
+
+
+async def delete_user(session: AsyncSession, *, user: User) -> None:
+    """Delete the user record. Cascade FKs handle entries/photos/etc."""
+    await session.execute(delete(User).where(User.id == user.id))
+    await session.commit()
+
+
+async def export_user_data(session: AsyncSession, *, user_id: UUID) -> dict:
+    """Return a JSON-serializable snapshot of the user's entries.
+
+    Photos/videos/audios are emitted as raw storage keys (the export
+    endpoint replaces them with public URLs for portability).
+    """
+    stmt = (
+        select(Entry)
+        .where(Entry.user_id == user_id)
+        .options(
+            selectinload(Entry.photos),
+            selectinload(Entry.videos),
+            selectinload(Entry.audios),
+        )
+        .order_by(Entry.written_at)
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    return {
+        "exported_at": datetime.now(tz=UTC).isoformat(),
+        "entries": [
+            {
+                "id": str(entry.id),
+                "title": entry.title,
+                "body": entry.body,
+                "written_at": entry.written_at.isoformat() if entry.written_at else None,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+                "lat": entry.lat,
+                "lng": entry.lng,
+                "place_name": entry.place_name,
+                "weather": entry.weather,
+                "photos": [p.storage_key for p in (entry.photos or [])],
+                "videos": [v.storage_key for v in (entry.videos or [])],
+                "audios": [
+                    {"storage_key": a.storage_key, "transcript": a.transcript}
+                    for a in (entry.audios or [])
+                ],
+            }
+            for entry in rows
+        ],
+    }

@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EntryAudio, EntryPhoto, EntryVideo } from '@/utils/entries';
+import { useTranslation } from '@/utils/i18n';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -135,6 +136,7 @@ function VideoPlayer({ video, width }: { video: EntryVideo; width: number }) {
 function AudioPlayer({ audio }: { audio: EntryAudio }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const { t } = useTranslation();
   const player = useAudioPlayer(audio.storage_key);
   const status = useAudioPlayerStatus(player);
 
@@ -170,7 +172,7 @@ function AudioPlayer({ audio }: { audio: EntryAudio }) {
         <IconSymbol name={playing ? 'pause.fill' : 'play.fill'} size={16} color="#fff" />
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.audioLabel, { color: c.text }]}>Voice note</Text>
+        <Text style={[styles.audioLabel, { color: c.text }]}>{t('editor.voiceNote')}</Text>
         <Text style={[styles.audioMeta, { color: c.muted }]} numberOfLines={1}>
           {playing ? `${formatDuration(current)} / ${formatDuration(duration)}` : formatDuration(duration)}
         </Text>

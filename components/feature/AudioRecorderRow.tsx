@@ -13,6 +13,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/utils/i18n';
 
 export type RecordedClip = {
   id: string;
@@ -118,6 +119,7 @@ export function AudioRecorderRow({
 function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => void }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
+  const { t } = useTranslation();
   const player = useAudioPlayer(clip.uri);
   const status = useAudioPlayerStatus(player);
 
@@ -155,10 +157,10 @@ function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => v
         )}
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.clipLabel, { color: c.text }]}>Voice note</Text>
+        <Text style={[styles.clipLabel, { color: c.text }]}>{t('editor.voiceNote')}</Text>
         <Text style={[styles.clipMeta, { color: c.muted }]}>
           {formatDuration(clip.duration_seconds)}
-          {clip.uploading ? ' · uploading…' : clip.storage_key ? ' · saved' : ''}
+          {clip.uploading ? ` · ${t('editor.uploading')}` : ''}
         </Text>
       </View>
       <TouchableOpacity onPress={onRemove} style={styles.clipRemove}>

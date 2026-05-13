@@ -8,11 +8,13 @@ import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getPromptPacks, getRecommended } from '@/constants/prompts';
 import { fetchMe, Me } from '@/utils/users';
+import { useTranslation } from '@/utils/i18n';
 
 export default function PromptsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
   const language = meQuery.data?.preferred_language;
   const promptPacks = getPromptPacks(language);
@@ -25,9 +27,9 @@ export default function PromptsScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={[styles.title, { color: c.text }]}>Prompts</Text>
+        <Text style={[styles.title, { color: c.text }]}>{t('prompts.title')}</Text>
 
-        <Text style={[styles.section, { color: c.text }]}>Recommended</Text>
+        <Text style={[styles.section, { color: c.text }]}>{t('prompts.recommended')}</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -50,7 +52,7 @@ export default function PromptsScreen() {
           ))}
         </ScrollView>
 
-        <Text style={[styles.section, { color: c.text, marginTop: Spacing.xl }]}>Prompt Packs</Text>
+        <Text style={[styles.section, { color: c.text, marginTop: Spacing.xl }]}>{t('prompts.packs')}</Text>
         {promptPacks.map((pack) => (
           <TouchableOpacity
             key={pack.id}
@@ -66,7 +68,7 @@ export default function PromptsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.packTitle, { color: c.text }]}>{pack.title}</Text>
               <Text style={[styles.packMeta, { color: c.muted }]}>
-                {pack.prompts.length} prompts
+                {t('prompts.packMeta', { count: pack.prompts.length })}
               </Text>
             </View>
             <IconSymbol name="chevron.right" size={18} color={c.muted} />

@@ -4,13 +4,16 @@ import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors, Radii, Spacing } from '@/constants/theme';
+import { RibbonMark } from '@/components/ui/Ribbon';
+import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTranslation } from '@/utils/i18n';
 
 export default function SignInScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const router = useRouter();
+  const { t } = useTranslation();
   const { signIn, setActive, isLoaded } = useSignIn();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,14 +38,27 @@ export default function SignInScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <View style={styles.container}>
-          <Text style={[styles.title, { color: c.text }]}>Life Book</Text>
-          <Text style={[styles.subtitle, { color: c.textSoft }]}>
+          <View style={styles.brand}>
+            <RibbonMark size={28} inkColor={c.text} accentColor={c.accent} backgroundColor={c.background} />
+          </View>
+          <Text style={[styles.title, { color: c.text, fontFamily: Type.serif }]}>
+            {t('auth.signIn.title')}
+          </Text>
+          <Text
+            style={[
+              styles.subtitle,
+              { color: c.textSoft, fontFamily: Type.italic, fontStyle: 'italic' },
+            ]}
+          >
             A daily journal that listens, then writes you a book.
           </Text>
 
           <TextInput
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-            placeholder="Email"
+            style={[
+              styles.input,
+              { color: c.text, borderColor: c.border, backgroundColor: c.paper, fontFamily: Type.serif },
+            ]}
+            placeholder={t('auth.signIn.email')}
             placeholderTextColor={c.muted}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -51,8 +67,11 @@ export default function SignInScreen() {
             onChangeText={setEmail}
           />
           <TextInput
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-            placeholder="Password"
+            style={[
+              styles.input,
+              { color: c.text, borderColor: c.border, backgroundColor: c.paper, fontFamily: Type.serif },
+            ]}
+            placeholder={t('auth.signIn.password')}
             placeholderTextColor={c.muted}
             secureTextEntry
             value={password}
@@ -62,15 +81,22 @@ export default function SignInScreen() {
           {error && <Text style={[styles.error, { color: c.danger }]}>{error}</Text>}
 
           <TouchableOpacity
-            style={[styles.primary, { backgroundColor: c.accent, opacity: busy ? 0.6 : 1 }]}
+            style={[styles.primary, { backgroundColor: c.text, opacity: busy ? 0.6 : 1 }]}
             onPress={submit}
             disabled={busy || !isLoaded}
+            activeOpacity={0.9}
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryLabel}>Sign in</Text>}
+            {busy ? (
+              <ActivityIndicator color={c.background} />
+            ) : (
+              <Text style={[styles.primaryLabel, { color: c.background }]}>
+                {t('auth.signIn.button')}
+              </Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/sign-up')}>
-            <Text style={[styles.toggle, { color: c.accentDark }]}>New here? Create an account</Text>
+            <Text style={[styles.toggle, { color: c.accentDark }]}>{t('auth.signIn.toggle')}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -82,11 +108,12 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
   container: { flex: 1, paddingHorizontal: Spacing.xl, justifyContent: 'center' },
-  title: { fontSize: 36, fontWeight: '700', marginBottom: Spacing.sm },
-  subtitle: { fontSize: 15, marginBottom: Spacing.xxl, lineHeight: 22 },
-  input: { borderWidth: 1, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: 16, marginBottom: Spacing.md },
+  brand: { alignItems: 'center', marginBottom: Spacing.lg },
+  title: { fontSize: 32, fontWeight: '500', letterSpacing: -0.5, textAlign: 'center', marginBottom: Spacing.sm },
+  subtitle: { fontSize: 16, marginBottom: Spacing.xxl, lineHeight: 24, textAlign: 'center' },
+  input: { borderWidth: 1, borderRadius: Radii.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, fontSize: 17, marginBottom: Spacing.md },
   error: { marginBottom: Spacing.md, fontSize: 14 },
-  primary: { borderRadius: Radii.md, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
-  primaryLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  primary: { borderRadius: 999, paddingVertical: Spacing.lg, alignItems: 'center', marginTop: Spacing.sm },
+  primaryLabel: { fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
   toggle: { textAlign: 'center', marginTop: Spacing.xl, fontSize: 14 },
 });
