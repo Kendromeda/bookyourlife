@@ -4,7 +4,6 @@ Updates an AiImageJob row through pending -> processing -> done/failed.
 """
 from __future__ import annotations
 
-import asyncio
 import base64
 from uuid import UUID
 
@@ -17,6 +16,7 @@ from app.config import get_settings
 from app.db import session_scope
 from app.models.ai_image_job import AiImageJob, AiImageJobStatus
 from app.services.storage.r2 import get_r2_storage
+from app.tasks.async_runner import run_async
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
@@ -30,14 +30,14 @@ def generate_image(self, job_id: str, prompt: str) -> None:
     settings = get_settings()
     if not settings.openai_api_key:
         logger.warning("openai key missing, marking failed", job_id=job_id)
-        asyncio.run(_mark_failed(UUID(job_id), "OpenAI not configured"))
+        run_async(_mark_failed(UUID(job_id), "OpenAI not configured"))
         return
 
     try:
-        asyncio.run(_run(UUID(job_id), prompt))
+        run_async(_run(UUID(job_id), prompt))
     except _PermanentError as exc:
         logger.warning("image gen permanent failure", job_id=job_id, error=str(exc))
-        asyncio.run(_mark_failed(UUID(job_id), str(exc)))
+        run_async(_mark_failed(UUID(job_id), str(exc)))
     except APIStatusError as exc:
         if HTTP_CLIENT_ERROR_MIN <= exc.status_code < HTTP_SERVER_ERROR_MIN:
             logger.warning(
@@ -46,7 +46,7 @@ def generate_image(self, job_id: str, prompt: str) -> None:
                 status=exc.status_code,
                 error=str(exc),
             )
-            asyncio.run(_mark_failed(UUID(job_id), str(exc)))
+            run_async(_mark_failed(UUID(job_id), str(exc)))
             return
         logger.warning("image gen failed, retrying", job_id=job_id, error=str(exc))
         raise self.retry(exc=exc, countdown=30) from exc
@@ -55,7 +55,7 @@ def generate_image(self, job_id: str, prompt: str) -> None:
         try:
             raise self.retry(exc=exc, countdown=30) from exc
         except Exception:
-            asyncio.run(_mark_failed(UUID(job_id), str(exc)))
+            run_async(_mark_failed(UUID(job_id), str(exc)))
 
 
 class _PermanentError(Exception):

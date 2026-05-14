@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import os
@@ -21,6 +20,7 @@ from app.db import session_scope
 from app.models.book import Book
 from app.models.entry import Entry, EntryAudio
 from app.services.storage.r2 import get_r2_storage
+from app.tasks.async_runner import run_async
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
@@ -47,7 +47,7 @@ CHAPTER_TITLES = [
 
 @celery_app.task(name="app.tasks.book_gen.generate_book")
 def generate_book(book_id: str) -> None:
-    asyncio.run(_run(UUID(book_id)))
+    run_async(_run(UUID(book_id)))
 
 
 async def _run(book_id: UUID) -> None:

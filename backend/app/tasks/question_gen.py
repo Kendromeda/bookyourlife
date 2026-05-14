@@ -7,7 +7,6 @@ meledak di scale.
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -17,6 +16,7 @@ from sqlalchemy import select
 from app.db import session_scope
 from app.models.user import User
 from app.services.question_generator import generate_question_for_user
+from app.tasks.async_runner import run_async
 from app.tasks.celery_app import celery_app
 from app.tasks.notification import send_push
 
@@ -30,7 +30,7 @@ def fan_out_daily_questions() -> int:
     "Due" = user.notif_hour == jam sekarang di timezone user. Untuk Phase 1
     sederhanakan: pakai UTC saja; tunable Phase 2.
     """
-    return asyncio.run(_fan_out_async())
+    return run_async(_fan_out_async())
 
 
 async def _fan_out_async() -> int:
@@ -48,7 +48,7 @@ async def _fan_out_async() -> int:
 
 @celery_app.task(name="app.tasks.question_gen.generate_for_user")
 def generate_for_user(user_id: str) -> str | None:
-    return asyncio.run(_generate_for_user_async(UUID(user_id)))
+    return run_async(_generate_for_user_async(UUID(user_id)))
 
 
 async def _generate_for_user_async(user_id: UUID) -> str | None:
