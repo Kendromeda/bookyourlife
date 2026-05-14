@@ -63,6 +63,24 @@ class R2Storage:
         obj = self._client.get_object(Bucket=self._bucket, Key=storage_key)
         return obj["Body"].read()
 
+    def delete_objects(self, storage_keys: list[str]) -> None:
+        unique_keys = sorted({key for key in storage_keys if key})
+        for index in range(0, len(unique_keys), 1000):
+            chunk = unique_keys[index : index + 1000]
+            response = self._client.delete_objects(
+                Bucket=self._bucket,
+                Delete={
+                    "Objects": [{"Key": key} for key in chunk],
+                    "Quiet": True,
+                },
+            )
+            errors = response.get("Errors", [])
+            if errors:
+                messages = ", ".join(
+                    f"{item.get('Key')}: {item.get('Message')}" for item in errors
+                )
+                raise RuntimeError(f"R2 delete failed: {messages}")
+
     def public_url(self, storage_key: str) -> str:
         return f"{self._public_base}/{storage_key}"
 

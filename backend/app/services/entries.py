@@ -2,12 +2,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+import structlog
 from sqlalchemy import desc, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.entry import Entry, EntryAudio, EntryPhoto, EntryVideo
+from app.services.storage.r2 import get_r2_storage
+
+logger = structlog.get_logger()
 
 
 @dataclass
@@ -214,17 +218,25 @@ async def update_entry(
     if weather is not _UNSET:
         entry.weather = weather  # type: ignore[assignment]
 
-    _diff_photos(entry, photos)
-    _diff_videos(entry, videos)
-    _diff_audios(entry, audios)
+    removed_storage_keys = [
+        *_diff_photos(entry, photos),
+        *_diff_videos(entry, videos),
+        *_diff_audios(entry, audios),
+    ]
+    active_storage_keys = set(_entry_storage_keys(entry))
+    orphaned_storage_keys = [
+        key for key in removed_storage_keys if key not in active_storage_keys
+    ]
 
     await session.commit()
+    _delete_storage_objects(orphaned_storage_keys)
     return await get_entry(session, user_id=user_id, entry_id=entry_id)
 
 
-def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> None:
+def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> list[str]:
     existing_by_id = {p.id: p for p in entry.photos}
     keep_ids: set[UUID] = set()
+    removed_storage_keys: list[str] = []
 
     for index, item in enumerate(items):
         if item.id is not None and item.id in existing_by_id:
@@ -240,12 +252,16 @@ def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> None:
 
     for photo in list(entry.photos):
         if photo.id not in keep_ids and photo.id in existing_by_id:
+            removed_storage_keys.append(photo.storage_key)
             entry.photos.remove(photo)
 
+    return removed_storage_keys
 
-def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> None:
+
+def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
     existing_by_id = {v.id: v for v in entry.videos}
     keep_ids: set[UUID] = set()
+    removed_storage_keys: list[str] = []
 
     for index, item in enumerate(items):
         if item.id is not None and item.id in existing_by_id:
@@ -262,12 +278,16 @@ def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> None:
 
     for video in list(entry.videos):
         if video.id not in keep_ids and video.id in existing_by_id:
+            removed_storage_keys.append(video.storage_key)
             entry.videos.remove(video)
 
+    return removed_storage_keys
 
-def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> None:
+
+def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
     existing_by_id = {a.id: a for a in entry.audios}
     keep_ids: set[UUID] = set()
+    removed_storage_keys: list[str] = []
 
     for index, item in enumerate(items):
         if item.id is not None and item.id in existing_by_id:
@@ -284,10 +304,36 @@ def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> None:
 
     for audio in list(entry.audios):
         if audio.id not in keep_ids and audio.id in existing_by_id:
+            removed_storage_keys.append(audio.storage_key)
             entry.audios.remove(audio)
+
+    return removed_storage_keys
 
 
 async def delete_entry(session: AsyncSession, *, user_id: UUID, entry_id: UUID) -> None:
     entry = await get_entry(session, user_id=user_id, entry_id=entry_id)
+    storage_keys = _entry_storage_keys(entry)
     await session.delete(entry)
     await session.commit()
+    _delete_storage_objects(storage_keys)
+
+
+def _entry_storage_keys(entry: Entry) -> list[str]:
+    return [
+        *(photo.storage_key for photo in entry.photos),
+        *(video.storage_key for video in entry.videos),
+        *(audio.storage_key for audio in entry.audios),
+    ]
+
+
+def _delete_storage_objects(storage_keys: list[str]) -> None:
+    if not storage_keys:
+        return
+    try:
+        get_r2_storage().delete_objects(storage_keys)
+    except Exception as exc:
+        logger.warning(
+            "r2 media cleanup failed",
+            count=len(set(storage_keys)),
+            error=str(exc),
+        )
