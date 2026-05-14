@@ -15,6 +15,7 @@ import { queryClient } from '@/utils/queryClient';
 import { setApiTokenGetter } from '@/utils/api';
 import { ensurePushRegistered } from '@/utils/fcm';
 import { I18nProvider } from '@/utils/i18n';
+import { useThemeStore } from '@/utils/themeStore';
 import { fetchMe, LanguageCode, Me } from '@/utils/users';
 import { useQuery } from '@tanstack/react-query';
 
@@ -94,8 +95,18 @@ function useActiveLanguage(): LanguageCode {
 function AppShell() {
   const colorScheme = useColorScheme();
   const lang = useActiveLanguage();
+  const hydrated = useThemeStore((s) => s.hydrated);
+  const hydrate = useThemeStore((s) => s.hydrate);
   useAuthGate();
   usePushLifecycle();
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
+  // Hold render until the persisted theme is loaded so the first paint
+  // matches the user's saved choice (no light→dark flash).
+  if (!hydrated) return null;
 
   return (
     <I18nProvider lang={lang}>
@@ -108,6 +119,7 @@ function AppShell() {
           <Stack.Screen name="book" options={{ headerShown: false }} />
           <Stack.Screen name="profile" options={{ headerShown: false }} />
           <Stack.Screen name="privacy" options={{ headerShown: false }} />
+          <Stack.Screen name="appearance" options={{ headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

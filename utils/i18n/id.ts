@@ -177,6 +177,16 @@ export const id: Record<TranslationKey, string> = {
   'profile.changePhoto': 'Ganti foto',
   'profile.saved': 'Tersimpan',
 
+  // Appearance screen
+  'appearance.title': 'Tampilan',
+  'appearance.section': 'Tema',
+  'appearance.light': 'Terang',
+  'appearance.lightDetail': 'Kertas krem · tampilan editorial default.',
+  'appearance.dark': 'Gelap',
+  'appearance.darkDetail': 'Latar tinta untuk membaca di tempat redup.',
+  'appearance.note':
+    'Pilihanmu tersimpan di perangkat ini dan tidak mengikuti pengaturan sistem.',
+
   // Privacy screen
   'privacy.title': 'Privasi',
   'privacy.body':

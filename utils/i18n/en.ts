@@ -176,6 +176,16 @@ export const en = {
   'profile.changePhoto': 'Change photo',
   'profile.saved': 'Saved',
 
+  // Appearance screen
+  'appearance.title': 'Appearance',
+  'appearance.section': 'Theme',
+  'appearance.light': 'Light',
+  'appearance.lightDetail': 'Cream paper · the editorial default.',
+  'appearance.dark': 'Dark',
+  'appearance.darkDetail': 'Ink background for low-light reading.',
+  'appearance.note':
+    'Your choice is saved on this device and does not follow the system setting.',
+
   // Privacy screen
   'privacy.title': 'Privacy',
   'privacy.body':

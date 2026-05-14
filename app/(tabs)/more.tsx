@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eyebrow, RibbonMark } from '@/components/ui/Ribbon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing, Type } from '@/constants/theme';
+import { useThemeStore } from '@/utils/themeStore';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTranslation } from '@/utils/i18n';
 import { fetchExport, fetchMe, LANGUAGES, LanguageCode, Me, updateMe } from '@/utils/users';
@@ -62,6 +63,7 @@ export default function MoreScreen() {
   const [exporting, setExporting] = useState(false);
 
   const meQuery = useQuery<Me>({ queryKey: ['me'], queryFn: fetchMe });
+  const themePreference = useThemeStore((s) => s.preference);
   const updateNotif = useMutation({
     mutationFn: (hour: number) => updateMe({ notif_hour: hour }),
     onSuccess: (data) => qc.setQueryData(['me'], data),
@@ -218,7 +220,12 @@ export default function MoreScreen() {
                 })}
               </View>
             )}
-            <Row icon="paintbrush.fill" label={t('more.row.appearance')} detail={t('more.row.appearanceDetail')} />
+            <Row
+              icon="paintbrush.fill"
+              label={t('more.row.appearance')}
+              detail={t(themePreference === 'dark' ? 'appearance.dark' : 'appearance.light')}
+              onPress={() => router.push('/appearance' as Href)}
+            />
 
             <Text style={[styles.section, { color: c.muted }]}>{t('more.section.account')}</Text>
             <Row
