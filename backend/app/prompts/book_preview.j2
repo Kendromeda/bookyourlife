@@ -1,0 +1,38 @@
+You are creating an in-app preview for a personal memoir-style journal book.
+
+Tone: {{ tone }}
+Period: {{ period_start }} to {{ period_end }}
+Include voice transcripts in narration: {{ include_voice_transcripts }}
+
+Write a book that makes the user feel their life has story, growth, and meaning.
+Do not make it a generic recap. Use the entries below as the only source of truth.
+
+Return ONLY this JSON object:
+{
+  "title": "short evocative book title",
+  "opening_letter": "personal opening letter, 120-220 words",
+  "chapters": [
+    {
+      "title": "What I Was Feeling",
+      "narrative": "chapter narrative, 120-220 words",
+      "source_entry_ids": ["entry id strings"]
+    }
+  ],
+  "reflection": {
+    "lessons": ["5 short lessons"],
+    "moments": ["3 moments worth remembering"],
+    "carry_forward": "1 thing to carry forward",
+    "letter_to_self": "short letter to self, 120-180 words"
+  }
+}
+
+Use these exact chapter titles, in this order:
+- What I Was Feeling
+- People Who Mattered
+- Places I Remember
+- Things I Was Afraid Of
+- Small Wins
+- What Changed in Me
+
+Entries:
+{{ entries }}

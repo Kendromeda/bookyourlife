@@ -12,6 +12,24 @@ export type GeneratedImage = {
   public_url: string;
 };
 
+export type ImageStyle =
+  | 'poetic'
+  | 'cinematic'
+  | 'minimalist'
+  | 'dreamy'
+  | 'illustrated'
+  | 'watercolor';
+
+export type ImageIntensity = 'subtle' | 'balanced' | 'expressive';
+
+export type AiDiagnostics = {
+  openai_configured: boolean;
+  r2_configured: boolean;
+  image_model: string;
+  image_size: string;
+  queue_reachable: boolean;
+};
+
 const DEFAULT_INTERVAL_MS = 2000;
 const DEFAULT_TIMEOUT_MS = 180_000;
 
@@ -30,8 +48,26 @@ export async function fetchHighlights(body: string): Promise<string[]> {
   return data.highlights ?? [];
 }
 
-export async function startImageGen(body: string): Promise<string> {
-  const { data } = await api.post<{ job_id: string }>('/ai/image-gen', { body });
+export async function fetchAiDiagnostics(): Promise<AiDiagnostics> {
+  const { data } = await api.get<AiDiagnostics>('/ai/diagnostics');
+  return data;
+}
+
+export async function startImageGen(
+  body: string,
+  options: {
+    prompt?: string;
+    style?: ImageStyle;
+    intensity?: ImageIntensity;
+  } = {},
+): Promise<string> {
+  const { data } = await api.post<{ job_id: string }>('/ai/image-gen', {
+    body,
+    prompt: options.prompt,
+    style: options.style ?? 'cinematic',
+    intensity: options.intensity ?? 'balanced',
+    purpose: 'entry_visual',
+  });
   return data.job_id;
 }
 

@@ -8,6 +8,7 @@ import asyncio
 import base64
 from uuid import UUID
 
+import httpx
 import structlog
 from openai import APIStatusError, OpenAI
 from sqlalchemy import select
@@ -82,9 +83,9 @@ async def _run(job_id: UUID, prompt: str) -> None:
         timeout=120,
     )
 
-    if not response.data or not response.data[0].b64_json:
+    if not response.data:
         raise _PermanentError("openai returned no image data")
-    image_bytes = base64.b64decode(response.data[0].b64_json)
+    image_bytes = _image_data_to_bytes(response.data[0])
 
     storage = get_r2_storage()
     storage_key = storage.upload_bytes(
@@ -115,3 +116,17 @@ async def _mark_failed(job_id: UUID, error: str) -> None:
             return
         job.status = AiImageJobStatus.failed
         job.error = error[:1000]
+
+
+def _image_data_to_bytes(image: object) -> bytes:
+    b64_json = getattr(image, "b64_json", None)
+    if b64_json:
+        return base64.b64decode(b64_json)
+
+    url = getattr(image, "url", None)
+    if url:
+        response = httpx.get(url, timeout=60)
+        response.raise_for_status()
+        return response.content
+
+    raise _PermanentError("openai returned no image bytes or image url")

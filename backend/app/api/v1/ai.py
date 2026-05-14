@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.deps import CurrentUser, SessionDep
 from app.models.ai_image_job import AiImageJob, AiImageJobStatus
 from app.schemas.ai import (
+    AiDiagnosticsResponse,
     HighlightsRequest,
     HighlightsResponse,
     ImageGenRequest,
@@ -34,6 +35,8 @@ from app.schemas.ai import (
     WritingPromptsResponse,
 )
 from app.services.storage.r2 import get_r2_storage
+from app.tasks.celery_app import celery_app
+from app.tasks.image_gen import generate_image
 
 router = APIRouter(prefix="/ai")
 logger = structlog.get_logger()
@@ -47,8 +50,8 @@ template_env = Environment(
 )
 
 
-def _render_prompt(template_name: str, body: str) -> str:
-    return template_env.get_template(template_name).render(body=body)
+def _render_prompt(template_name: str, **context: object) -> str:
+    return template_env.get_template(template_name).render(**context)
 
 
 def _chat_json(template_name: str, body: str) -> dict:
@@ -58,7 +61,7 @@ def _chat_json(template_name: str, body: str) -> dict:
             status.HTTP_503_SERVICE_UNAVAILABLE, "OpenAI not configured"
         )
 
-    prompt = _render_prompt(template_name, body)
+    prompt = _render_prompt(template_name, body=body)
     client = OpenAI(api_key=settings.openai_api_key)
 
     try:
@@ -90,6 +93,35 @@ def _string_list(payload: dict, key: str) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _queue_reachable() -> bool:
+    try:
+        conn = celery_app.connection_for_write()
+        conn.ensure_connection(max_retries=1)
+        conn.release()
+        return True
+    except Exception as exc:
+        logger.warning("celery diagnostics failed", error=str(exc))
+        return False
+
+
+@router.get("/diagnostics", response_model=AiDiagnosticsResponse)
+async def diagnostics(user: CurrentUser) -> AiDiagnosticsResponse:
+    settings = get_settings()
+    return AiDiagnosticsResponse(
+        openai_configured=bool(settings.openai_api_key),
+        r2_configured=bool(
+            settings.r2_endpoint
+            and settings.r2_access_key_id
+            and settings.r2_secret_access_key
+            and settings.r2_bucket
+            and settings.r2_public_base_url
+        ),
+        image_model=settings.openai_model_image,
+        image_size=settings.openai_image_size,
+        queue_reachable=_queue_reachable(),
+    )
 
 
 @router.post("/title-suggestions", response_model=TitleSuggestionsResponse)
@@ -125,19 +157,25 @@ async def start_image_gen(
     user: CurrentUser,
     session: SessionDep,
 ) -> ImageGenResponse:
+    rendered_prompt = _render_prompt(
+        "image_memory_visual.j2",
+        body=request.body.strip(),
+        prompt=(request.prompt or "").strip(),
+        style=request.style,
+        intensity=request.intensity,
+        purpose=request.purpose,
+    )
     job = AiImageJob(
         user_id=user.id,
         status=AiImageJobStatus.pending,
-        prompt=request.body,
+        prompt=rendered_prompt,
     )
     session.add(job)
     await session.commit()
     await session.refresh(job)
 
-    from app.tasks.image_gen import generate_image  # local import to avoid cycle
-
     try:
-        generate_image.delay(str(job.id), request.body)
+        generate_image.delay(str(job.id), rendered_prompt)
     except Exception as exc:
         logger.warning("image_gen enqueue failed", job_id=str(job.id), error=str(exc))
         raise HTTPException(

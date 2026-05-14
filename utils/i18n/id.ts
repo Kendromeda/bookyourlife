@@ -190,7 +190,7 @@ export const id: Record<TranslationKey, string> = {
   // Privacy screen
   'privacy.title': 'Privasi',
   'privacy.body':
-    'Entri jurnalmu disimpan secara privat dan hanya digunakan untuk merangkai refleksi harian. Kami tidak pernah membagikan isi jurnalmu ke pihak ketiga. Voice note ditranskripsikan via OpenAI dan dibuang setelah diproses.',
+    'Entri jurnalmu disimpan secara privat dan hanya digunakan untuk merangkai refleksi harian. Kami tidak pernah membagikan isi jurnalmu ke pihak ketiga. Voice note tidak ditranskripsikan secara default; transkripsi hanya dipakai saat kamu mengaktifkannya untuk preview buku.',
   'privacy.deleteAccount': 'Hapus akun',
   'privacy.deleteTitle': 'Hapus akunmu?',
   'privacy.deleteMessage':

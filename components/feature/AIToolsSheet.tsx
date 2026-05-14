@@ -1,27 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
 import {
+  AiDiagnostics,
+  fetchAiDiagnostics,
   fetchHighlights,
   fetchTitleSuggestions,
   fetchWritingPrompts,
   GeneratedImage,
+  ImageIntensity,
+  ImageStyle,
   pollImageJob,
   startImageGen,
 } from '@/utils/ai';
 import { useTranslation } from '@/utils/i18n';
 
 type AITool = 'titles' | 'prompts' | 'highlights' | 'image';
+type ImagePhase = 'idle' | 'queued' | 'generating' | 'done' | 'failed';
 
 type Props = {
   visible: boolean;
@@ -34,7 +40,22 @@ type Props = {
 };
 
 const MIN_TEXT_BODY_LENGTH = 50;
-const MIN_IMAGE_BODY_LENGTH = 30;
+const MIN_IMAGE_PROMPT_LENGTH = 10;
+
+const IMAGE_STYLES: { value: ImageStyle; label: string }[] = [
+  { value: 'poetic', label: 'Poetic' },
+  { value: 'cinematic', label: 'Cinematic' },
+  { value: 'minimalist', label: 'Minimalist' },
+  { value: 'dreamy', label: 'Dreamy' },
+  { value: 'illustrated', label: 'Illustrated' },
+  { value: 'watercolor', label: 'Watercolor' },
+];
+
+const IMAGE_INTENSITIES: { value: ImageIntensity; label: string }[] = [
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'expressive', label: 'Expressive' },
+];
 
 export function AIToolsSheet({
   visible,
@@ -48,8 +69,15 @@ export function AIToolsSheet({
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('cinematic');
+  const [imageIntensity, setImageIntensity] = useState<ImageIntensity>('balanced');
+  const [imagePhase, setImagePhase] = useState<ImagePhase>('idle');
+  const [diagnostics, setDiagnostics] = useState<AiDiagnostics | null>(null);
 
+  const trimmedBody = useMemo(() => entryBody.trim(), [entryBody]);
   const toolTitles: Record<AITool, string> = {
     titles: t('editor.aiTools.titles'),
     prompts: t('editor.aiTools.prompts'),
@@ -61,15 +89,26 @@ export function AIToolsSheet({
     if (!visible) {
       setLoading(false);
       setResults([]);
+      setError(null);
       setGeneratedImage(null);
+      setImagePhase('idle');
       return;
     }
 
-    const trimmedBody = entryBody.trim();
-    const minLength = tool === 'image' ? MIN_IMAGE_BODY_LENGTH : MIN_TEXT_BODY_LENGTH;
-    if (trimmedBody.length < minLength) {
-      Alert.alert(t('common.loading'), t('common.retry'));
-      onClose();
+    if (tool === 'image') {
+      setImagePrompt(trimmedBody.slice(0, 1200));
+      setGeneratedImage(null);
+      setImagePhase('idle');
+      setError(null);
+      void fetchAiDiagnostics()
+        .then(setDiagnostics)
+        .catch(() => setDiagnostics(null));
+      return;
+    }
+
+    if (trimmedBody.length < MIN_TEXT_BODY_LENGTH) {
+      setError('Write a little more before using this AI tool.');
+      setResults([]);
       return;
     }
 
@@ -78,50 +117,27 @@ export function AIToolsSheet({
     async function runTool() {
       setLoading(true);
       setResults([]);
-      setGeneratedImage(null);
+      setError(null);
 
       try {
         if (tool === 'titles') {
           const titles = await fetchTitleSuggestions(trimmedBody);
-          if (!cancelled) {
-            setResults(titles);
-          }
+          if (!cancelled) setResults(titles);
           return;
         }
-
         if (tool === 'prompts') {
           const prompts = await fetchWritingPrompts(trimmedBody);
-          if (!cancelled) {
-            setResults(prompts);
-          }
+          if (!cancelled) setResults(prompts);
           return;
         }
-
-        if (tool === 'highlights') {
-          const highlights = await fetchHighlights(trimmedBody);
-          if (!cancelled) {
-            setResults(highlights);
-          }
-          return;
-        }
-
-        const jobId = await startImageGen(trimmedBody);
-        const completed = await pollImageJob(jobId);
+        const highlights = await fetchHighlights(trimmedBody);
+        if (!cancelled) setResults(highlights);
+      } catch (err) {
         if (!cancelled) {
-          setGeneratedImage(completed);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          Alert.alert(
-            t('export.failed'),
-            error instanceof Error ? error.message : t('common.tryAgain'),
-          );
-          onClose();
+          setError(err instanceof Error ? err.message : 'AI request failed.');
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -130,7 +146,7 @@ export function AIToolsSheet({
     return () => {
       cancelled = true;
     };
-  }, [entryBody, onClose, tool, visible, t]);
+  }, [tool, trimmedBody, visible]);
 
   const applyTextResult = (item: string) => {
     if (tool === 'titles') {
@@ -139,6 +155,31 @@ export function AIToolsSheet({
       onAppendText(item);
     }
     onClose();
+  };
+
+  const generateImage = async () => {
+    const prompt = imagePrompt.trim();
+    if ((prompt || trimmedBody).length < MIN_IMAGE_PROMPT_LENGTH) {
+      setError('Add a short prompt or write more in the entry first.');
+      return;
+    }
+    setError(null);
+    setGeneratedImage(null);
+    setImagePhase('queued');
+    try {
+      const jobId = await startImageGen(trimmedBody, {
+        prompt,
+        style: imageStyle,
+        intensity: imageIntensity,
+      });
+      setImagePhase('generating');
+      const completed = await pollImageJob(jobId);
+      setGeneratedImage(completed);
+      setImagePhase('done');
+    } catch (err) {
+      setImagePhase('failed');
+      setError(err instanceof Error ? err.message : 'Image generation failed.');
+    }
   };
 
   const addPhoto = () => {
@@ -160,38 +201,181 @@ export function AIToolsSheet({
             </Pressable>
           </View>
 
-          {loading ? (
+          {tool === 'image' ? (
+            <ImageForm
+              diagnostics={diagnostics}
+              error={error}
+              generatedImage={generatedImage}
+              imageIntensity={imageIntensity}
+              imagePhase={imagePhase}
+              imagePrompt={imagePrompt}
+              imageStyle={imageStyle}
+              onAddPhoto={addPhoto}
+              onGenerate={generateImage}
+              onPromptChange={setImagePrompt}
+              onSetIntensity={setImageIntensity}
+              onSetStyle={setImageStyle}
+              onDiscard={onClose}
+            />
+          ) : loading ? (
             <View style={styles.loading}>
               <ActivityIndicator />
             </View>
-          ) : tool === 'image' && generatedImage ? (
-            <View style={styles.imageWrap}>
-              <Image source={{ uri: generatedImage.public_url }} style={styles.image} />
-              <View style={styles.actions}>
-                <Pressable style={[styles.button, styles.secondaryButton]} onPress={onClose}>
-                  <Text style={styles.secondaryButtonText}>{t('common.discard')}</Text>
-                </Pressable>
-                <Pressable style={[styles.button, styles.primaryButton]} onPress={addPhoto}>
-                  <Text style={styles.primaryButtonText}>{t('common.add')}</Text>
-                </Pressable>
-              </View>
-            </View>
           ) : (
-            <FlatList
-              data={results}
-              keyExtractor={(item, index) => `${item}-${index}`}
-              renderItem={({ item }) => (
-                <Pressable style={styles.row} onPress={() => applyTextResult(item)}>
-                  <Text style={styles.rowText}>{item}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={<Text style={styles.empty}>{t('common.tryAgain')}</Text>}
-              contentContainerStyle={results.length === 0 ? styles.emptyList : undefined}
-            />
+            <>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <FlatList
+                data={results}
+                keyExtractor={(item, index) => `${item}-${index}`}
+                renderItem={({ item }) => (
+                  <Pressable style={styles.row} onPress={() => applyTextResult(item)}>
+                    <Text style={styles.rowText}>{item}</Text>
+                  </Pressable>
+                )}
+                ListEmptyComponent={<Text style={styles.empty}>{t('common.tryAgain')}</Text>}
+                contentContainerStyle={results.length === 0 ? styles.emptyList : undefined}
+              />
+            </>
           )}
         </View>
       </View>
     </Modal>
+  );
+}
+
+function ImageForm({
+  diagnostics,
+  error,
+  generatedImage,
+  imageIntensity,
+  imagePhase,
+  imagePrompt,
+  imageStyle,
+  onAddPhoto,
+  onGenerate,
+  onPromptChange,
+  onSetIntensity,
+  onSetStyle,
+  onDiscard,
+}: {
+  diagnostics: AiDiagnostics | null;
+  error: string | null;
+  generatedImage: GeneratedImage | null;
+  imageIntensity: ImageIntensity;
+  imagePhase: ImagePhase;
+  imagePrompt: string;
+  imageStyle: ImageStyle;
+  onAddPhoto: () => void;
+  onGenerate: () => void;
+  onPromptChange: (value: string) => void;
+  onSetIntensity: (value: ImageIntensity) => void;
+  onSetStyle: (value: ImageStyle) => void;
+  onDiscard: () => void;
+}) {
+  const busy = imagePhase === 'queued' || imagePhase === 'generating';
+  const status =
+    imagePhase === 'queued'
+      ? 'Queued...'
+      : imagePhase === 'generating'
+        ? 'Generating image...'
+        : imagePhase === 'failed'
+          ? 'Failed'
+          : imagePhase === 'done'
+            ? 'Ready'
+            : 'Ready to generate';
+
+  return (
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <Text style={styles.label}>Prompt</Text>
+      <TextInput
+        value={imagePrompt}
+        onChangeText={onPromptChange}
+        placeholder="Describe the memory, mood, or symbol you want to visualize."
+        placeholderTextColor="#9ca3af"
+        style={styles.promptInput}
+        multiline
+        textAlignVertical="top"
+      />
+
+      <Text style={styles.label}>Style</Text>
+      <View style={styles.chips}>
+        {IMAGE_STYLES.map((item) => (
+          <Chip
+            key={item.value}
+            active={imageStyle === item.value}
+            label={item.label}
+            onPress={() => onSetStyle(item.value)}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.label}>Intensity</Text>
+      <View style={styles.chips}>
+        {IMAGE_INTENSITIES.map((item) => (
+          <Chip
+            key={item.value}
+            active={imageIntensity === item.value}
+            label={item.label}
+            onPress={() => onSetIntensity(item.value)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.diagnostics}>
+        <Text style={styles.diagnosticsText}>
+          {diagnostics
+            ? `OpenAI ${diagnostics.openai_configured ? 'ready' : 'missing'} · R2 ${
+                diagnostics.r2_configured ? 'ready' : 'missing'
+              } · Queue ${diagnostics.queue_reachable ? 'ready' : 'offline'}`
+            : 'Checking AI configuration...'}
+        </Text>
+        {diagnostics ? (
+          <Text style={styles.diagnosticsText}>
+            {diagnostics.image_model} · {diagnostics.image_size}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.statusRow}>
+        <Text style={styles.status}>{status}</Text>
+        {busy ? <ActivityIndicator /> : null}
+      </View>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {generatedImage ? (
+        <View style={styles.imageWrap}>
+          <Image source={{ uri: generatedImage.public_url }} style={styles.image} />
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <Pressable style={[styles.button, styles.secondaryButton]} onPress={onDiscard}>
+          <Text style={styles.secondaryButtonText}>Discard</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.primaryButton, busy && styles.disabledButton]}
+          disabled={busy}
+          onPress={generatedImage ? onAddPhoto : onGenerate}
+        >
+          <Text style={styles.primaryButtonText}>
+            {generatedImage ? 'Add to entry' : busy ? 'Generating...' : 'Generate'}
+          </Text>
+        </Pressable>
+      </View>
+      {generatedImage ? (
+        <Pressable style={styles.regenerate} onPress={onGenerate} disabled={busy}>
+          <Text style={styles.regenerateText}>Regenerate</Text>
+        </Pressable>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -202,7 +386,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    maxHeight: '78%',
+    maxHeight: '88%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#fff',
@@ -250,9 +434,81 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#6b7280',
   },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  promptInput: {
+    minHeight: 116,
+    borderRadius: 14,
+    backgroundColor: '#f3f4f6',
+    padding: 14,
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#111827',
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipActive: {
+    borderColor: '#111827',
+    backgroundColor: '#111827',
+  },
+  chipText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#fff',
+  },
+  diagnostics: {
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    marginTop: 16,
+    gap: 4,
+  },
+  diagnosticsText: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  statusRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  status: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  error: {
+    color: '#b91c1c',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
   imageWrap: {
     alignItems: 'center',
-    gap: 18,
+    marginTop: 8,
+    marginBottom: 16,
   },
   image: {
     width: 300,
@@ -261,9 +517,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   actions: {
-    width: '100%',
     flexDirection: 'row',
     gap: 12,
+    marginTop: 8,
   },
   button: {
     flex: 1,
@@ -271,6 +527,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
   primaryButton: {
     backgroundColor: '#111827',
@@ -287,5 +546,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#111827',
+  },
+  regenerate: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  regenerateText: {
+    color: '#2563eb',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

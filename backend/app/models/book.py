@@ -1,7 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import ARRAY, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,11 +13,23 @@ class Book(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "books"
 
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     timeframe: Mapped[str] = mapped_column(String(16), nullable=False)  # 3m | 6m | lifetime
     style: Mapped[str] = mapped_column(String(32), nullable=False)  # poetic | casual | reflective
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cover_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    opening_letter: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preview_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="abstract")
+    include_voice_transcripts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -25,7 +38,10 @@ class Chapter(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "chapters"
 
     book_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)

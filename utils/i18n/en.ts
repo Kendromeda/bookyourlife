@@ -189,7 +189,7 @@ export const en = {
   // Privacy screen
   'privacy.title': 'Privacy',
   'privacy.body':
-    'Your entries are stored privately and only used to power your daily reflections. We never share your journal content with third parties. Voice notes are transcribed via OpenAI and discarded after processing.',
+    'Your entries are stored privately and only used to power your daily reflections. We never share your journal content with third parties. Voice notes are not transcribed by default; transcription is only used when you explicitly enable it for a book preview.',
   'privacy.deleteAccount': 'Delete account',
   'privacy.deleteTitle': 'Delete your account?',
   'privacy.deleteMessage':
