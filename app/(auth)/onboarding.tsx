@@ -108,7 +108,7 @@ export default function OnboardingScreen() {
     setPhotoBusy(true);
     try {
       const uploaded = await uploadPhoto(asset.uri, asset.mimeType ?? 'image/jpeg', 'face-photo');
-      setPhotoKey(uploaded.storage_key);
+      setPhotoKey(uploaded.public_url);
     } catch (e: any) {
       setError(e?.message ?? t('editor.error.photoUploadFailed'));
       setPhotoUri(null);

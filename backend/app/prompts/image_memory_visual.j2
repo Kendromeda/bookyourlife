@@ -3,6 +3,7 @@ Create a meaningful journal memory visual.
 Purpose: {{ purpose }}
 Style: {{ style }}
 Emotional intensity: {{ intensity }}
+Source image provided: {{ "yes" if has_source_image else "no" }}
 
 User direction:
 {{ prompt or "Use the entry as the source of truth." }}
@@ -10,4 +11,4 @@ User direction:
 Journal entry:
 {{ body }}
 
-Make the image feel personal, reflective, and specific to the memory. Avoid text, logos, UI, watermarks, distorted faces, or generic stock-photo composition. Prefer symbolic storytelling, atmosphere, objects, light, color, and place. If the entry is sensitive, use an abstract or environmental visual instead of literal depiction.
+Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Transform the provided source photo according to the user direction while preserving the real memory as the visual anchor. Do not merely copy it; reinterpret the mood, lighting, color, and storytelling style.{% endif %} Avoid text, logos, UI, watermarks, distorted faces, or generic stock-photo composition. Prefer symbolic storytelling, atmosphere, objects, light, color, and place. If the entry is sensitive, use an abstract or environmental visual instead of literal depiction.

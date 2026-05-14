@@ -38,6 +38,7 @@ class ImageGenRequest(BaseModel):
     style: ImageStyle = "cinematic"
     intensity: ImageIntensity = "balanced"
     purpose: ImagePurpose = "entry_visual"
+    source_image_storage_key: str | None = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
     def require_prompt_or_body(self) -> "ImageGenRequest":

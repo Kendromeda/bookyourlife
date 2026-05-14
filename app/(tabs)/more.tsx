@@ -5,6 +5,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -132,9 +133,13 @@ export default function MoreScreen() {
               style={[styles.profileCard, { backgroundColor: c.paper, borderColor: c.border }]}
             >
               <View style={[styles.avatar, { backgroundColor: c.accent }]}>
-                <Text style={[styles.avatarLabel, { fontFamily: Type.serif }]}>
-                  {displayName.slice(0, 1).toUpperCase()}
-                </Text>
+                {me?.face_photo_url ? (
+                  <Image source={{ uri: me.face_photo_url }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={[styles.avatarLabel, { fontFamily: Type.serif }]}>
+                    {displayName.slice(0, 1).toUpperCase()}
+                  </Text>
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.profileName, { color: c.text, fontFamily: Type.serif }]}>
@@ -288,7 +293,9 @@ const styles = StyleSheet.create({
     borderRadius: Radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImage: { width: '100%', height: '100%' },
   avatarLabel: { color: '#fff', fontSize: 22, fontWeight: '500' },
   profileName: { fontSize: 18, fontWeight: '600', letterSpacing: -0.2 },
   profileMeta: { fontSize: 12, marginTop: 2 },

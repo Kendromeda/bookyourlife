@@ -33,7 +33,10 @@ ALLOWED_AUDIO_TYPES = {
 
 
 class PresignedRequestIn(BaseModel):
-    purpose: str = Field(default="entry-photo", pattern="^(entry-photo|face-photo)$")
+    purpose: str = Field(
+        default="entry-photo",
+        pattern="^(entry-photo|face-photo|ai-reference)$",
+    )
     content_type: str = Field(default="image/jpeg", pattern="^image/(jpeg|png|webp)$")
 
 
@@ -63,7 +66,10 @@ async def presign_photo(payload: PresignedRequestIn, user: CurrentUser) -> Presi
 async def upload_photo_direct(
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
-    purpose: Annotated[str, Form(pattern="^(entry-photo|face-photo)$")] = "entry-photo",
+    purpose: Annotated[
+        str,
+        Form(pattern="^(entry-photo|face-photo|ai-reference)$"),
+    ] = "entry-photo",
 ) -> DirectUploadOut:
     return await _upload_direct(
         user_id=str(user.id),

@@ -59,6 +59,7 @@ export async function startImageGen(
     prompt?: string;
     style?: ImageStyle;
     intensity?: ImageIntensity;
+    sourceImageStorageKey?: string | null;
   } = {},
 ): Promise<string> {
   const { data } = await api.post<{ job_id: string }>('/ai/image-gen', {
@@ -67,6 +68,7 @@ export async function startImageGen(
     style: options.style ?? 'cinematic',
     intensity: options.intensity ?? 'balanced',
     purpose: 'entry_visual',
+    source_image_storage_key: options.sourceImageStorageKey ?? undefined,
   });
   return data.job_id;
 }

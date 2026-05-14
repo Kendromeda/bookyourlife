@@ -5,6 +5,8 @@ Updates an AiImageJob row through pending -> processing -> done/failed.
 from __future__ import annotations
 
 import base64
+import os
+from io import BytesIO
 from uuid import UUID
 
 import httpx
@@ -26,18 +28,26 @@ HTTP_SERVER_ERROR_MIN = 500
 
 
 @celery_app.task(name="app.tasks.image_gen.generate_image", bind=True, max_retries=2)
-def generate_image(self, job_id: str, prompt: str) -> None:
+def generate_image(
+    self,
+    job_id: str,
+    prompt: str,
+    source_image_storage_key: str | None = None,
+) -> None:
     settings = get_settings()
     if not settings.openai_api_key:
         logger.warning("openai key missing, marking failed", job_id=job_id)
         run_async(_mark_failed(UUID(job_id), "OpenAI not configured"))
+        _delete_source_reference(source_image_storage_key)
         return
 
     try:
-        run_async(_run(UUID(job_id), prompt))
+        run_async(_run(UUID(job_id), prompt, source_image_storage_key))
+        _delete_source_reference(source_image_storage_key)
     except _PermanentError as exc:
         logger.warning("image gen permanent failure", job_id=job_id, error=str(exc))
         run_async(_mark_failed(UUID(job_id), str(exc)))
+        _delete_source_reference(source_image_storage_key)
     except APIStatusError as exc:
         if HTTP_CLIENT_ERROR_MIN <= exc.status_code < HTTP_SERVER_ERROR_MIN:
             logger.warning(
@@ -47,6 +57,7 @@ def generate_image(self, job_id: str, prompt: str) -> None:
                 error=str(exc),
             )
             run_async(_mark_failed(UUID(job_id), str(exc)))
+            _delete_source_reference(source_image_storage_key)
             return
         logger.warning("image gen failed, retrying", job_id=job_id, error=str(exc))
         raise self.retry(exc=exc, countdown=30) from exc
@@ -56,13 +67,18 @@ def generate_image(self, job_id: str, prompt: str) -> None:
             raise self.retry(exc=exc, countdown=30) from exc
         except Exception:
             run_async(_mark_failed(UUID(job_id), str(exc)))
+            _delete_source_reference(source_image_storage_key)
 
 
 class _PermanentError(Exception):
     pass
 
 
-async def _run(job_id: UUID, prompt: str) -> None:
+async def _run(
+    job_id: UUID,
+    prompt: str,
+    source_image_storage_key: str | None,
+) -> None:
     settings = get_settings()
 
     async with session_scope() as session:
@@ -75,19 +91,30 @@ async def _run(job_id: UUID, prompt: str) -> None:
         job.error = None
 
     client = OpenAI(api_key=settings.openai_api_key)
-    response = client.images.generate(
-        model=settings.openai_model_image,
-        prompt=prompt,
-        n=1,
-        size=settings.openai_image_size,
-        timeout=120,
-    )
+    storage = get_r2_storage()
+    if source_image_storage_key:
+        source_file = _source_image_file(storage, source_image_storage_key)
+        response = client.images.edit(
+            model=settings.openai_model_image,
+            image=source_file,
+            prompt=prompt,
+            n=1,
+            size=settings.openai_image_size,
+            timeout=120,
+        )
+    else:
+        response = client.images.generate(
+            model=settings.openai_model_image,
+            prompt=prompt,
+            n=1,
+            size=settings.openai_image_size,
+            timeout=120,
+        )
 
     if not response.data:
         raise _PermanentError("openai returned no image data")
     image_bytes = _image_data_to_bytes(response.data[0])
 
-    storage = get_r2_storage()
     storage_key = storage.upload_bytes(
         key_prefix=f"ai-image/{job_id}",
         data=image_bytes,
@@ -130,3 +157,20 @@ def _image_data_to_bytes(image: object) -> bytes:
         return response.content
 
     raise _PermanentError("openai returned no image bytes or image url")
+
+
+def _source_image_file(storage, storage_key: str) -> BytesIO:  # type: ignore[no-untyped-def]
+    data = storage.download_bytes(storage_key)
+    extension = os.path.splitext(storage_key)[1].lstrip(".") or "jpg"
+    file_obj = BytesIO(data)
+    file_obj.name = f"source-image.{extension}"
+    return file_obj
+
+
+def _delete_source_reference(storage_key: str | None) -> None:
+    if not storage_key or not storage_key.startswith("ai-reference/"):
+        return
+    try:
+        get_r2_storage().delete_objects([storage_key])
+    except Exception as exc:
+        logger.warning("ai source image cleanup failed", storage_key=storage_key, error=str(exc))

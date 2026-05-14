@@ -95,6 +95,19 @@ def _string_list(payload: dict, key: str) -> list[str]:
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
+def _validate_source_image_key(storage_key: str | None, user_id: UUID) -> str | None:
+    if not storage_key:
+        return None
+    allowed_prefixes = (
+        f"ai-reference/{user_id}/",
+        f"entry-photo/{user_id}/",
+        f"face-photo/{user_id}/",
+    )
+    if not storage_key.startswith(allowed_prefixes):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Source image is not allowed")
+    return storage_key
+
+
 def _queue_reachable() -> bool:
     try:
         conn = celery_app.connection_for_write()
@@ -157,6 +170,10 @@ async def start_image_gen(
     user: CurrentUser,
     session: SessionDep,
 ) -> ImageGenResponse:
+    source_image_storage_key = _validate_source_image_key(
+        request.source_image_storage_key,
+        user.id,
+    )
     rendered_prompt = _render_prompt(
         "image_memory_visual.j2",
         body=request.body.strip(),
@@ -164,6 +181,7 @@ async def start_image_gen(
         style=request.style,
         intensity=request.intensity,
         purpose=request.purpose,
+        has_source_image=bool(source_image_storage_key),
     )
     job = AiImageJob(
         user_id=user.id,
@@ -175,7 +193,7 @@ async def start_image_gen(
     await session.refresh(job)
 
     try:
-        generate_image.delay(str(job.id), rendered_prompt)
+        generate_image.delay(str(job.id), rendered_prompt, source_image_storage_key)
     except Exception as exc:
         logger.warning("image_gen enqueue failed", job_id=str(job.id), error=str(exc))
         raise HTTPException(

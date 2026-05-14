@@ -161,7 +161,7 @@ export type DirectUpload = {
 
 export async function requestPhotoUpload(
   contentType: string,
-  purpose: 'entry-photo' | 'face-photo' = 'entry-photo',
+  purpose: 'entry-photo' | 'face-photo' | 'ai-reference' = 'entry-photo',
 ): Promise<PresignedUpload> {
   const { data } = await api.post<PresignedUpload>('/uploads/photo', {
     purpose,
@@ -187,7 +187,7 @@ export async function uploadPhotoToR2(
 export async function uploadPhoto(
   fileUri: string,
   contentType: string,
-  purpose: 'entry-photo' | 'face-photo' = 'entry-photo',
+  purpose: 'entry-photo' | 'face-photo' | 'ai-reference' = 'entry-photo',
 ): Promise<DirectUpload> {
   return uploadWithRetry(() => uploadPhotoOnce(fileUri, contentType, purpose));
 }
@@ -223,7 +223,7 @@ const UPLOAD_TIMEOUT_MS = 120_000;
 async function uploadPhotoOnce(
   fileUri: string,
   contentType: string,
-  purpose: 'entry-photo' | 'face-photo',
+  purpose: 'entry-photo' | 'face-photo' | 'ai-reference',
 ): Promise<DirectUpload> {
   const form = new FormData();
   const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';

@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUser) -> UserOut:
-    return UserOut.model_validate(user)
+    return _to_out(user)
 
 
 @router.patch("/me", response_model=UserOut)
@@ -34,7 +34,7 @@ async def update_me(payload: UserUpsertIn, user: CurrentUser, session: SessionDe
         user.journaling_goal = payload.journaling_goal
     await session.commit()
     await session.refresh(user)
-    return UserOut.model_validate(user)
+    return _to_out(user)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
@@ -76,3 +76,10 @@ async def register_fcm_token(
         token=payload.token,
         platform=payload.platform,
     )
+
+
+def _to_out(user) -> UserOut:  # type: ignore[no-untyped-def]
+    data = UserOut.model_validate(user)
+    if data.face_photo_url and not data.face_photo_url.startswith(("http://", "https://")):
+        data.face_photo_url = get_r2_storage().public_url(data.face_photo_url)
+    return data

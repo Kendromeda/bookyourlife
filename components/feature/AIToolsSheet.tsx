@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
   FlatList,
@@ -24,10 +25,17 @@ import {
   pollImageJob,
   startImageGen,
 } from '@/utils/ai';
+import { uploadPhoto } from '@/utils/entries';
 import { useTranslation } from '@/utils/i18n';
 
 type AITool = 'titles' | 'prompts' | 'highlights' | 'image';
 type ImagePhase = 'idle' | 'queued' | 'generating' | 'done' | 'failed';
+type SourceImage = {
+  uri: string;
+  mimeType: string;
+  storage_key: string | null;
+  uploading: boolean;
+};
 
 type Props = {
   visible: boolean;
@@ -76,6 +84,7 @@ export function AIToolsSheet({
   const [imageIntensity, setImageIntensity] = useState<ImageIntensity>('balanced');
   const [imagePhase, setImagePhase] = useState<ImagePhase>('idle');
   const [diagnostics, setDiagnostics] = useState<AiDiagnostics | null>(null);
+  const [sourceImage, setSourceImage] = useState<SourceImage | null>(null);
 
   const trimmedBody = useMemo(() => entryBody.trim(), [entryBody]);
   const toolTitles: Record<AITool, string> = {
@@ -92,6 +101,7 @@ export function AIToolsSheet({
       setError(null);
       setGeneratedImage(null);
       setImagePhase('idle');
+      setSourceImage(null);
       return;
     }
 
@@ -100,6 +110,7 @@ export function AIToolsSheet({
       setGeneratedImage(null);
       setImagePhase('idle');
       setError(null);
+      setSourceImage(null);
       void fetchAiDiagnostics()
         .then(setDiagnostics)
         .catch(() => setDiagnostics(null));
@@ -165,12 +176,26 @@ export function AIToolsSheet({
     }
     setError(null);
     setGeneratedImage(null);
-    setImagePhase('queued');
     try {
+      let sourceImageStorageKey = sourceImage?.storage_key ?? null;
+      if (sourceImage && !sourceImageStorageKey) {
+        setSourceImage({ ...sourceImage, uploading: true });
+        const uploaded = await uploadPhoto(sourceImage.uri, sourceImage.mimeType, 'ai-reference');
+        sourceImageStorageKey = uploaded.storage_key;
+        setSourceImage({
+          uri: uploaded.public_url,
+          mimeType: sourceImage.mimeType,
+          storage_key: uploaded.storage_key,
+          uploading: false,
+        });
+      }
+
+      setImagePhase('queued');
       const jobId = await startImageGen(trimmedBody, {
         prompt,
         style: imageStyle,
         intensity: imageIntensity,
+        sourceImageStorageKey,
       });
       setImagePhase('generating');
       const completed = await pollImageJob(jobId);
@@ -178,6 +203,7 @@ export function AIToolsSheet({
       setImagePhase('done');
     } catch (err) {
       setImagePhase('failed');
+      setSourceImage((current) => (current ? { ...current, uploading: false } : current));
       setError(err instanceof Error ? err.message : 'Image generation failed.');
     }
   };
@@ -187,6 +213,30 @@ export function AIToolsSheet({
       onAddPhoto(generatedImage);
       onClose();
     }
+  };
+
+  const pickSourceImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError('Photo library permission is required.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    setError(null);
+    setGeneratedImage(null);
+    setImagePhase('idle');
+    setSourceImage({
+      uri: asset.uri,
+      mimeType: asset.mimeType ?? 'image/jpeg',
+      storage_key: null,
+      uploading: false,
+    });
   };
 
   return (
@@ -210,9 +260,12 @@ export function AIToolsSheet({
               imagePhase={imagePhase}
               imagePrompt={imagePrompt}
               imageStyle={imageStyle}
+              sourceImage={sourceImage}
               onAddPhoto={addPhoto}
               onGenerate={generateImage}
               onPromptChange={setImagePrompt}
+              onPickSourceImage={pickSourceImage}
+              onRemoveSourceImage={() => setSourceImage(null)}
               onSetIntensity={setImageIntensity}
               onSetStyle={setImageStyle}
               onDiscard={onClose}
@@ -251,9 +304,12 @@ function ImageForm({
   imagePhase,
   imagePrompt,
   imageStyle,
+  sourceImage,
   onAddPhoto,
   onGenerate,
   onPromptChange,
+  onPickSourceImage,
+  onRemoveSourceImage,
   onSetIntensity,
   onSetStyle,
   onDiscard,
@@ -265,14 +321,18 @@ function ImageForm({
   imagePhase: ImagePhase;
   imagePrompt: string;
   imageStyle: ImageStyle;
+  sourceImage: SourceImage | null;
   onAddPhoto: () => void;
   onGenerate: () => void;
   onPromptChange: (value: string) => void;
+  onPickSourceImage: () => void;
+  onRemoveSourceImage: () => void;
   onSetIntensity: (value: ImageIntensity) => void;
   onSetStyle: (value: ImageStyle) => void;
   onDiscard: () => void;
 }) {
   const busy = imagePhase === 'queued' || imagePhase === 'generating';
+  const uploadingSource = Boolean(sourceImage?.uploading);
   const status =
     imagePhase === 'queued'
       ? 'Queued...'
@@ -286,6 +346,38 @@ function ImageForm({
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <Text style={styles.label}>Upload your photo</Text>
+      <Pressable style={styles.sourceBox} onPress={onPickSourceImage} disabled={busy}>
+        {sourceImage ? (
+          <>
+            <Image source={{ uri: sourceImage.uri }} style={styles.sourceThumb} />
+            <View style={styles.sourceTextWrap}>
+              <Text style={styles.sourceTitle}>
+                {sourceImage.uploading ? 'Uploading source photo...' : 'Source photo ready'}
+              </Text>
+              <Text style={styles.sourceSub}>Use this photo as the visual reference.</Text>
+            </View>
+            {sourceImage.uploading ? (
+              <ActivityIndicator />
+            ) : (
+              <Pressable hitSlop={8} onPress={onRemoveSourceImage}>
+                <Text style={styles.removeSource}>Remove</Text>
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.sourceIcon}>
+              <Text style={styles.sourceIconText}>+</Text>
+            </View>
+            <View style={styles.sourceTextWrap}>
+              <Text style={styles.sourceTitle}>Add optional source photo</Text>
+              <Text style={styles.sourceSub}>Transform a real memory with the prompt below.</Text>
+            </View>
+          </>
+        )}
+      </Pressable>
+
       <Text style={styles.label}>Prompt</Text>
       <TextInput
         value={imagePrompt}
@@ -353,12 +445,24 @@ function ImageForm({
           <Text style={styles.secondaryButtonText}>Discard</Text>
         </Pressable>
         <Pressable
-          style={[styles.button, styles.primaryButton, busy && styles.disabledButton]}
-          disabled={busy}
+          style={[
+            styles.button,
+            styles.primaryButton,
+            (busy || uploadingSource) && styles.disabledButton,
+          ]}
+          disabled={busy || uploadingSource}
           onPress={generatedImage ? onAddPhoto : onGenerate}
         >
           <Text style={styles.primaryButtonText}>
-            {generatedImage ? 'Add to entry' : busy ? 'Generating...' : 'Generate'}
+            {generatedImage
+              ? 'Add to entry'
+              : uploadingSource
+                ? 'Uploading...'
+                : busy
+                  ? 'Generating...'
+                  : sourceImage
+                    ? 'Transform image'
+                    : 'Generate'}
           </Text>
         </Pressable>
       </View>
@@ -451,6 +555,57 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     color: '#111827',
+  },
+  sourceBox: {
+    minHeight: 72,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sourceIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceIconText: {
+    color: '#111827',
+    fontSize: 24,
+    fontWeight: '600',
+    lineHeight: 26,
+  },
+  sourceThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#e5e7eb',
+  },
+  sourceTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sourceTitle: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sourceSub: {
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  removeSource: {
+    color: '#b91c1c',
+    fontSize: 12,
+    fontWeight: '700',
   },
   chips: {
     flexDirection: 'row',
