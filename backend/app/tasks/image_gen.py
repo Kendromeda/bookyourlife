@@ -25,6 +25,7 @@ logger = structlog.get_logger()
 
 HTTP_CLIENT_ERROR_MIN = 400
 HTTP_SERVER_ERROR_MIN = 500
+OPENAI_IMAGE_TIMEOUT_SECONDS = 360
 
 
 @celery_app.task(name="app.tasks.image_gen.generate_image", bind=True, max_retries=2)
@@ -100,7 +101,7 @@ async def _run(
             prompt=prompt,
             n=1,
             size="auto",
-            timeout=120,
+            timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
         )
     else:
         response = client.images.generate(
@@ -108,7 +109,7 @@ async def _run(
             prompt=prompt,
             n=1,
             size=settings.openai_image_size,
-            timeout=120,
+            timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
         )
 
     if not response.data:

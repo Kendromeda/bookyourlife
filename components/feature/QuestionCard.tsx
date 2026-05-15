@@ -70,10 +70,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: Spacing.xl,
     paddingTop: Spacing.xl + 2,
-    shadowColor: '#2C2421',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    boxShadow: '0px 6px 12px rgba(44, 36, 33, 0.08)',
     elevation: 1,
   },
   text: {

@@ -27,8 +27,8 @@ export type AiDiagnostics = {
   queue_reachable: boolean;
 };
 
-const DEFAULT_INTERVAL_MS = 2000;
-const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_INTERVAL_MS = 3000;
+const DEFAULT_TIMEOUT_MS = 600_000;
 
 export async function fetchTitleSuggestions(body: string): Promise<string[]> {
   const { data } = await api.post<{ titles?: string[] }>('/ai/title-suggestions', { body });
