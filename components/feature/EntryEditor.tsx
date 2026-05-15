@@ -558,7 +558,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
                   : styles.photoSlotGrid;
               return (
                 <View key={p.id} style={slotStyle}>
-                  <Image source={{ uri: p.uri }} style={styles.photoThumb} resizeMode="cover" />
+                  <Image source={{ uri: p.uri }} style={styles.photoThumb} resizeMode="contain" />
                   {p.uploading ? (
                     <View style={styles.photoOverlay}>
                       <ActivityIndicator color="#fff" />
@@ -885,18 +885,21 @@ const styles = StyleSheet.create({
     height: Math.round((Dimensions.get('window').width - Spacing.lg * 2) * 0.66),
     borderRadius: Radii.md,
     overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
   },
   photoSlotHalf: {
     width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
     height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
     borderRadius: Radii.md,
     overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
   },
   photoSlotGrid: {
     width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
     height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
     borderRadius: Radii.md,
     overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
   },
   photoThumb: { width: '100%', height: '100%' },
   photoOverlay: {

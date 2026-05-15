@@ -99,7 +99,7 @@ async def _run(
             image=source_file,
             prompt=prompt,
             n=1,
-            size=settings.openai_image_size,
+            size="auto",
             timeout=120,
         )
     else:

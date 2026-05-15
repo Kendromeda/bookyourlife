@@ -62,7 +62,7 @@ export function JournalMedia() {
       contentContainerStyle={{ padding: 2, paddingBottom: Spacing.xxl }}
       renderItem={({ item }) => (
         <View style={styles.cell}>
-          <Image source={{ uri: item.uri }} style={styles.photo} />
+          <Image source={{ uri: item.uri }} style={styles.photo} resizeMode="contain" />
         </View>
       )}
     />
@@ -80,5 +80,5 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '600' },
   emptySub: { fontSize: 14, textAlign: 'center' },
   cell: { width: '33.333%', aspectRatio: 1, padding: 2 },
-  photo: { width: '100%', height: '100%', borderRadius: Radii.sm },
+  photo: { width: '100%', height: '100%', borderRadius: Radii.sm, backgroundColor: '#f3f4f6' },
 });

@@ -350,7 +350,7 @@ function ImageForm({
       <Pressable style={styles.sourceBox} onPress={onPickSourceImage} disabled={busy}>
         {sourceImage ? (
           <>
-            <Image source={{ uri: sourceImage.uri }} style={styles.sourceThumb} />
+            <Image source={{ uri: sourceImage.uri }} style={styles.sourceThumb} resizeMode="contain" />
             <View style={styles.sourceTextWrap}>
               <Text style={styles.sourceTitle}>
                 {sourceImage.uploading ? 'Uploading source photo...' : 'Source photo ready'}
@@ -436,7 +436,11 @@ function ImageForm({
 
       {generatedImage ? (
         <View style={styles.imageWrap}>
-          <Image source={{ uri: generatedImage.public_url }} style={styles.image} />
+          <Image
+            source={{ uri: generatedImage.public_url }}
+            style={styles.image}
+            resizeMode="contain"
+          />
         </View>
       ) : null}
 

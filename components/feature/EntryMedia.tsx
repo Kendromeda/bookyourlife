@@ -50,8 +50,13 @@ function PhotoStack({ photos, width }: { photos: EntryPhoto[]; width: number }) 
     return (
       <Image
         source={{ uri: p.storage_key }}
-        style={{ width, height: Math.round(width * 0.66), borderRadius: Radii.md }}
-        resizeMode="cover"
+        style={{
+          width,
+          height: Math.round(width * 0.66),
+          borderRadius: Radii.md,
+          backgroundColor: '#f3f4f6',
+        }}
+        resizeMode="contain"
       />
     );
   }
@@ -63,8 +68,13 @@ function PhotoStack({ photos, width }: { photos: EntryPhoto[]; width: number }) 
           <Image
             key={p.id}
             source={{ uri: p.storage_key }}
-            style={{ width: cellW, height: cellW, borderRadius: Radii.sm }}
-            resizeMode="cover"
+            style={{
+              width: cellW,
+              height: cellW,
+              borderRadius: Radii.sm,
+              backgroundColor: '#f3f4f6',
+            }}
+            resizeMode="contain"
           />
         ))}
       </View>
@@ -78,8 +88,13 @@ function PhotoStack({ photos, width }: { photos: EntryPhoto[]; width: number }) 
     <View style={{ gap: Spacing.xs }}>
       <Image
         source={{ uri: photos[0].storage_key }}
-        style={{ width, height: heroH, borderRadius: Radii.md }}
-        resizeMode="cover"
+        style={{
+          width,
+          height: heroH,
+          borderRadius: Radii.md,
+          backgroundColor: '#f3f4f6',
+        }}
+        resizeMode="contain"
       />
       <View style={{ flexDirection: 'row', gap: Spacing.xs }}>
         {extra.map((p, idx) => (
@@ -87,7 +102,7 @@ function PhotoStack({ photos, width }: { photos: EntryPhoto[]; width: number }) 
             <Image
               source={{ uri: p.storage_key }}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              resizeMode="contain"
             />
             {idx === extra.length - 1 && photos.length > 4 && (
               <View style={styles.photoMoreOverlay}>
