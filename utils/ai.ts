@@ -13,11 +13,8 @@ export type GeneratedImage = {
 };
 
 export type ImageStyle =
-  | 'poetic'
-  | 'cinematic'
-  | 'minimalist'
-  | 'dreamy'
-  | 'illustrated'
+  | 'black_white_drawing'
+  | 'animated'
   | 'watercolor';
 
 export type ImageIntensity = 'subtle' | 'balanced' | 'expressive';
@@ -65,7 +62,7 @@ export async function startImageGen(
   const { data } = await api.post<{ job_id: string }>('/ai/image-gen', {
     body,
     prompt: options.prompt,
-    style: options.style ?? 'cinematic',
+    style: options.style ?? 'black_white_drawing',
     intensity: options.intensity ?? 'balanced',
     purpose: 'entry_visual',
     source_image_storage_key: options.sourceImageStorageKey ?? undefined,

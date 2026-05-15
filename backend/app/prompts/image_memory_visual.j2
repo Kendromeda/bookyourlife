@@ -6,18 +6,12 @@ Emotional intensity: {{ intensity }}
 Source image provided: {{ "yes" if has_source_image else "no" }}
 
 Style instruction:
-{% if style == "poetic" -%}
-Turn this memory into a poetic visual. Focus on symbolism, quiet emotion, soft natural light, and small meaningful objects. Make it feel like a personal memory, not a fantasy poster.
-{% elif style == "cinematic" -%}
-Make this look like a cinematic still from a personal film. Use realistic lighting, emotional framing, natural depth of field, subtle color grading, and an intimate story-driven composition. Avoid making it look like a movie poster.
-{% elif style == "minimalist" -%}
-Create a minimalist visual with lots of negative space, a restrained color palette, clean composition, and one strong emotional symbol from the memory. Keep it calm, simple, and premium.
-{% elif style == "dreamy" -%}
-Reimagine this memory as a dreamlike scene. Use soft atmosphere, gentle surreal details, blurred emotional boundaries, glowing light, and expressive color while staying connected to the real memory.
-{% elif style == "illustrated" -%}
-Turn this into a warm editorial illustration. Use expressive hand-drawn details, natural proportions, rich but controlled color, and a modern storybook-like composition.
+{% if style == "black_white_drawing" -%}
+Transform the image into a black and white hand-drawn illustration. Use pencil or ink linework, natural shading, subtle cross-hatching, and paper texture. Keep the result like a detailed observational drawing, not a cheap filter and not a cartoon.
 {% elif style == "watercolor" -%}
-Transform this memory into a delicate watercolor image. Use soft paper texture, translucent pigment, gentle color bleeding, muted tones, and imperfect hand-painted edges.
+Transform the image into a soft watercolor study. Use translucent pigment, paper grain, gentle color bleeding, loose edges, and muted natural tones. Keep the memory recognizable, just rendered as watercolor.
+{% elif style == "animated" -%}
+Transform the image into a clean animated illustration style. Use simplified shapes, smooth clean outlines, expressive but natural colors, soft lighting, and a polished animated-film look. Keep it warm and personal, not childish or overly exaggerated.
 {% endif %}
 
 Intensity instruction:
@@ -35,4 +29,4 @@ User direction:
 Journal entry:
 {{ body }}
 
-Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Use the uploaded photo as the main visual reference. Preserve the overall subject, composition, and memory, but reinterpret the mood, lighting, color, and style based on the selected style. Do not crop important parts of the image.{% endif %} Avoid text, logos, UI, watermarks, distorted faces, or generic stock-photo composition. Prefer symbolic storytelling, atmosphere, objects, light, color, and place. If the entry is sensitive, use an abstract or environmental visual instead of literal depiction.
+Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Use the uploaded photo as the main visual reference. Preserve the original subject, composition, objects, people, pose, setting, and overall memory. Do not crop important parts of the image.{% endif %} Do not add any new person, object, animal, building, text, logo, decorative element, watermark, or UI. Do not remove important existing parts of the image. Only reinterpret the visual style, texture, lighting, color, and medium. If the entry is sensitive, keep the transformation respectful and grounded.

@@ -27,7 +27,7 @@ class HighlightsResponse(BaseModel):
     highlights: list[str]
 
 
-ImageStyle = Literal["poetic", "cinematic", "minimalist", "dreamy", "illustrated", "watercolor"]
+ImageStyle = Literal["black_white_drawing", "watercolor", "animated"]
 ImageIntensity = Literal["subtle", "balanced", "expressive"]
 ImagePurpose = Literal["entry_visual", "book_cover", "chapter_opener", "quote_page"]
 
@@ -35,7 +35,7 @@ ImagePurpose = Literal["entry_visual", "book_cover", "chapter_opener", "quote_pa
 class ImageGenRequest(BaseModel):
     body: str = Field(default="", max_length=10_000)
     prompt: str | None = Field(default=None, max_length=1_500)
-    style: ImageStyle = "cinematic"
+    style: ImageStyle = "black_white_drawing"
     intensity: ImageIntensity = "balanced"
     purpose: ImagePurpose = "entry_visual"
     source_image_storage_key: str | None = Field(default=None, max_length=512)

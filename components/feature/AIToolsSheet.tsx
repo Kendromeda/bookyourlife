@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 
 import {
   AiDiagnostics,
@@ -50,13 +51,22 @@ type Props = {
 const MIN_TEXT_BODY_LENGTH = 50;
 const MIN_IMAGE_PROMPT_LENGTH = 10;
 
-const IMAGE_STYLES: { value: ImageStyle; label: string }[] = [
-  { value: 'poetic', label: 'Poetic' },
-  { value: 'cinematic', label: 'Cinematic' },
-  { value: 'minimalist', label: 'Minimalist' },
-  { value: 'dreamy', label: 'Dreamy' },
-  { value: 'illustrated', label: 'Illustrated' },
-  { value: 'watercolor', label: 'Watercolor' },
+const IMAGE_STYLES: { value: ImageStyle; label: string; preview: ImageSourcePropType }[] = [
+  {
+    value: 'black_white_drawing',
+    label: 'B&W drawing',
+    preview: require('../../assets/images/style-black-white-drawing.jpg'),
+  },
+  {
+    value: 'watercolor',
+    label: 'Watercolor',
+    preview: require('../../assets/images/style-watercolor.jpg'),
+  },
+  {
+    value: 'animated',
+    label: 'Animated',
+    preview: require('../../assets/images/style-animated.jpg'),
+  },
 ];
 
 const IMAGE_INTENSITIES: { value: ImageIntensity; label: string }[] = [
@@ -80,7 +90,7 @@ export function AIToolsSheet({
   const [error, setError] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
   const [imagePrompt, setImagePrompt] = useState('');
-  const [imageStyle, setImageStyle] = useState<ImageStyle>('cinematic');
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('black_white_drawing');
   const [imageIntensity, setImageIntensity] = useState<ImageIntensity>('balanced');
   const [imagePhase, setImagePhase] = useState<ImagePhase>('idle');
   const [diagnostics, setDiagnostics] = useState<AiDiagnostics | null>(null);
@@ -390,12 +400,13 @@ function ImageForm({
       />
 
       <Text style={styles.label}>Style</Text>
-      <View style={styles.chips}>
+      <View style={styles.styleCards}>
         {IMAGE_STYLES.map((item) => (
-          <Chip
+          <StyleCard
             key={item.value}
             active={imageStyle === item.value}
             label={item.label}
+            preview={item.preview}
             onPress={() => onSetStyle(item.value)}
           />
         ))}
@@ -483,6 +494,28 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
   return (
     <Pressable style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function StyleCard({
+  active,
+  label,
+  preview,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  preview: ImageSourcePropType;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[styles.styleCard, active && styles.styleCardActive]}
+      onPress={onPress}
+    >
+      <Image source={preview} style={styles.stylePreview} resizeMode="cover" />
+      <Text style={[styles.styleCardText, active && styles.styleCardTextActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -615,6 +648,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  styleCards: {
+    gap: 10,
+  },
+  styleCard: {
+    minHeight: 78,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  styleCardActive: {
+    borderColor: '#111827',
+    backgroundColor: '#f3f4f6',
+  },
+  stylePreview: {
+    width: 88,
+    height: 58,
+    borderRadius: 10,
+    backgroundColor: '#e5e7eb',
+  },
+  styleCardText: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  styleCardTextActive: {
+    color: '#111827',
   },
   chip: {
     borderRadius: 999,
