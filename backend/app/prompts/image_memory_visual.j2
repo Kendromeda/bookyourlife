@@ -5,10 +5,34 @@ Style: {{ style }}
 Emotional intensity: {{ intensity }}
 Source image provided: {{ "yes" if has_source_image else "no" }}
 
+Style instruction:
+{% if style == "poetic" -%}
+Turn this memory into a poetic visual. Focus on symbolism, quiet emotion, soft natural light, and small meaningful objects. Make it feel like a personal memory, not a fantasy poster.
+{% elif style == "cinematic" -%}
+Make this look like a cinematic still from a personal film. Use realistic lighting, emotional framing, natural depth of field, subtle color grading, and an intimate story-driven composition. Avoid making it look like a movie poster.
+{% elif style == "minimalist" -%}
+Create a minimalist visual with lots of negative space, a restrained color palette, clean composition, and one strong emotional symbol from the memory. Keep it calm, simple, and premium.
+{% elif style == "dreamy" -%}
+Reimagine this memory as a dreamlike scene. Use soft atmosphere, gentle surreal details, blurred emotional boundaries, glowing light, and expressive color while staying connected to the real memory.
+{% elif style == "illustrated" -%}
+Turn this into a warm editorial illustration. Use expressive hand-drawn details, natural proportions, rich but controlled color, and a modern storybook-like composition.
+{% elif style == "watercolor" -%}
+Transform this memory into a delicate watercolor image. Use soft paper texture, translucent pigment, gentle color bleeding, muted tones, and imperfect hand-painted edges.
+{% endif %}
+
+Intensity instruction:
+{% if intensity == "subtle" -%}
+Keep the transformation subtle and close to the original feeling. Avoid extreme changes.
+{% elif intensity == "balanced" -%}
+Balance realism and artistic interpretation. Make the mood clear without overdoing it.
+{% elif intensity == "expressive" -%}
+Push the emotion more strongly with bolder lighting, color, atmosphere, and symbolism while keeping the memory recognizable.
+{% endif %}
+
 User direction:
 {{ prompt or "Use the entry as the source of truth." }}
 
 Journal entry:
 {{ body }}
 
-Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Transform the provided source photo according to the user direction while preserving the real memory as the visual anchor. Do not merely copy it; reinterpret the mood, lighting, color, and storytelling style.{% endif %} Avoid text, logos, UI, watermarks, distorted faces, or generic stock-photo composition. Prefer symbolic storytelling, atmosphere, objects, light, color, and place. If the entry is sensitive, use an abstract or environmental visual instead of literal depiction.
+Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Use the uploaded photo as the main visual reference. Preserve the overall subject, composition, and memory, but reinterpret the mood, lighting, color, and style based on the selected style. Do not crop important parts of the image.{% endif %} Avoid text, logos, UI, watermarks, distorted faces, or generic stock-photo composition. Prefer symbolic storytelling, atmosphere, objects, light, color, and place. If the entry is sensitive, use an abstract or environmental visual instead of literal depiction.
