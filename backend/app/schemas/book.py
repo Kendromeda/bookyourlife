@@ -39,6 +39,10 @@ class BookPreviewChapter(BaseModel):
     narrative: str
     source_entry_ids: list[str] = Field(default_factory=list)
     image_url: str | None = None
+    # One short italic-worthy line drawn from the chapter, used for the
+    # pull-quote spread in the viewer. Optional for backward compatibility
+    # with previews generated before this field was introduced.
+    pull_quote: str | None = None
 
 
 class BookPreviewMediaItem(BaseModel):
@@ -64,3 +68,27 @@ class BookPreviewResponse(BaseModel):
     media_pages: list[BookPreviewMediaItem] = Field(default_factory=list)
     reflection: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+    illustrations: dict[str, Any] = Field(default_factory=dict)
+    tweaks: dict[str, Any] = Field(default_factory=dict)
+
+
+class BookIllustrationUpdate(BaseModel):
+    """Set or clear a single illustration slot.
+
+    `storage_key=None` clears the slot. `crop` is a free-form dict the
+    frontend uses for its image reframe state — backend only stores it.
+    """
+
+    slot_id: str = Field(min_length=1, max_length=64)
+    storage_key: str | None = Field(default=None, max_length=512)
+    crop: dict[str, Any] | None = None
+
+
+class BookTweaksUpdate(BaseModel):
+    """Partial tweak update — any unset field leaves the existing value alone."""
+
+    paper: str | None = Field(default=None, max_length=32)
+    type: str | None = Field(default=None, max_length=32)
+    ribbon: str | None = Field(default=None, max_length=32)
+    surface: str | None = Field(default=None, max_length=32)
+    illustrations_enabled: bool | None = None

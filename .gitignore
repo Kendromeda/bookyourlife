@@ -46,3 +46,4 @@ app-example
 
 # Claude Design handoff bundles (local scratch)
 .tmp-design/
+BookPreview/

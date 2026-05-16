@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BookViewer } from '@/components/feature/book/BookViewer';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import {
@@ -22,6 +23,7 @@ import {
   fetchBookPreview,
 } from '@/utils/books';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { fetchMe, fetchStats, type Me, type UserStats } from '@/utils/users';
 
 const TONES: { value: BookTone; label: string }[] = [
   { value: 'poetic', label: 'Poetic' },
@@ -81,6 +83,33 @@ export default function BookScreen() {
   const preview = previewQuery.data;
   const busy =
     generate.isPending || preview?.status === 'queued' || preview?.status === 'processing';
+
+  const meQuery = useQuery<Me>({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    enabled: preview?.status === 'done',
+    staleTime: 60_000,
+  });
+  const statsQuery = useQuery<UserStats>({
+    queryKey: ['stats'],
+    queryFn: fetchStats,
+    enabled: preview?.status === 'done',
+    staleTime: 60_000,
+  });
+
+  // When the preview lands, swap to the hardcover viewer. Setup state
+  // stays mounted under the modal so a back-to-setup feels instant.
+  if (preview?.status === 'done') {
+    return (
+      <BookViewer
+        preview={preview}
+        authorName={meQuery.data?.display_name ?? meQuery.data?.email ?? 'Author'}
+        totalEntries={statsQuery.data?.total_entries ?? 0}
+        totalWords={statsQuery.data?.total_words ?? 0}
+        onClose={() => router.back()}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={['top']}>

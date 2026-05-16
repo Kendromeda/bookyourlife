@@ -32,6 +32,15 @@ class Book(UUIDMixin, TimestampMixin, Base):
     period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # User-supplied photos for slot ids in the viewer (frontispiece, plates,
+    # author portrait, etc.). Shape: { slot_id: { storage_key, crop? } }.
+    illustrations: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+    # Per-book viewer styling: paper / type / ribbon / surface / illustrations_enabled.
+    tweaks: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
 
 
 class Chapter(UUIDMixin, TimestampMixin, Base):

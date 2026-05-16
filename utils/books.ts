@@ -16,6 +16,27 @@ export type BookPreviewChapter = {
   narrative: string;
   source_entry_ids: string[];
   image_url: string | null;
+  /** Optional pull-quote line emitted by the LLM for the pull-quote spread. */
+  pull_quote?: string | null;
+};
+
+export type BookIllustrationCrop = {
+  s?: number;
+  x?: number;
+  y?: number;
+};
+
+export type BookIllustration = {
+  storage_key: string;
+  crop?: BookIllustrationCrop;
+};
+
+export type BookTweaks = {
+  paper?: 'cream' | 'ivory' | 'white' | 'slate';
+  type?: 'newsreader' | 'garamond' | 'cormorant';
+  ribbon?: 'terracotta' | 'ink' | 'forest' | 'wine';
+  surface?: 'ink' | 'walnut' | 'slate' | 'paper';
+  illustrations_enabled?: boolean;
 };
 
 export type BookPreviewMediaItem = {
@@ -46,6 +67,8 @@ export type BookPreview = {
     letter_to_self?: string;
   };
   error: string | null;
+  illustrations: Record<string, BookIllustration>;
+  tweaks: BookTweaks;
 };
 
 export type CreateBookPreviewInput = {
@@ -63,5 +86,26 @@ export async function createBookPreview(input: CreateBookPreviewInput): Promise<
 
 export async function fetchBookPreview(bookId: string): Promise<BookPreview> {
   const { data } = await api.get<BookPreview>(`/books/previews/${bookId}`);
+  return data;
+}
+
+export async function updateBookIllustration(
+  bookId: string,
+  slotId: string,
+  storageKey: string | null,
+  crop?: BookIllustrationCrop,
+): Promise<BookPreview> {
+  const { data } = await api.patch<BookPreview>(
+    `/books/previews/${bookId}/illustrations`,
+    { slot_id: slotId, storage_key: storageKey, crop },
+  );
+  return data;
+}
+
+export async function updateBookTweaks(
+  bookId: string,
+  tweaks: BookTweaks,
+): Promise<BookPreview> {
+  const { data } = await api.patch<BookPreview>(`/books/previews/${bookId}/tweaks`, tweaks);
   return data;
 }

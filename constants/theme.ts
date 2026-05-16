@@ -114,3 +114,66 @@ export const Letterspacing = {
   tight: -0.2,
   none: 0,
 };
+
+/**
+ * Per-book viewer paper palettes — the four "Paper" choices in the Book
+ * Preview design (cream / ivory / white / slate). Each palette includes
+ * the engraving-plate stripe colors used by PlateBox placeholders.
+ */
+export type BookPaperKey = 'cream' | 'ivory' | 'white' | 'slate';
+
+export const BookPaperPalettes: Record<
+  BookPaperKey,
+  {
+    paper: string;
+    ink: string;
+    soft: string;
+    faint: string;
+    plateA: string;
+    plateB: string;
+  }
+> = {
+  cream: { paper: '#FAF6F0', ink: '#2C2421', soft: '#5A4F49', faint: '#9B8E84', plateA: '#EDE3D3', plateB: '#F4EBDA' },
+  ivory: { paper: '#FFFCF5', ink: '#1F1B19', soft: '#4E4641', faint: '#A39A91', plateA: '#F2EAD7', plateB: '#FAF3E1' },
+  white: { paper: '#FFFFFF', ink: '#1A1614', soft: '#4A413C', faint: '#A39A91', plateA: '#EAEAEA', plateB: '#F4F4F4' },
+  slate: { paper: '#E6E4DE', ink: '#1E1F22', soft: '#41454B', faint: '#7E8389', plateA: '#D3D2CC', plateB: '#DEDDD6' },
+};
+
+/** Ribbon accent palettes for the chapter dividers and brand sigil. */
+export type BookRibbonKey = 'terracotta' | 'ink' | 'forest' | 'wine';
+
+export const BookRibbonPalettes: Record<BookRibbonKey, { c: string; d: string }> = {
+  terracotta: { c: '#C4886B', d: '#A36F54' },
+  ink:        { c: '#2C2421', d: '#1A1413' },
+  forest:     { c: '#5C7A55', d: '#3F5A3A' },
+  wine:       { c: '#923A3A', d: '#6F2A2A' },
+};
+
+/** Stage / scene background behind the book in the viewer. */
+export type BookSurfaceKey = 'ink' | 'walnut' | 'slate' | 'paper';
+
+export const BookSurfacePalettes: Record<BookSurfaceKey, string> = {
+  ink:    '#231C19',
+  walnut: '#3A2C24',
+  slate:  '#2A2D33',
+  paper:  '#E9DFCF',
+};
+
+/**
+ * Type set choices for the viewer. We keep mapping to platform stock
+ * fonts (no Google Fonts bundled) — `serif` rotates between three
+ * tones; the design names them after their Web equivalents.
+ */
+export type BookTypeKey = 'newsreader' | 'garamond' | 'cormorant';
+
+export const BookTypeSets: Record<
+  BookTypeKey,
+  { serif: string; display: string; label: string }
+> = {
+  // The frontend maps all three to Type.serif / Type.italic — the
+  // labels stay distinct so the user sees their choice. When custom
+  // fonts get bundled (expo-font), this is the single place to swap.
+  newsreader: { serif: Type.serif, display: Type.italic, label: 'Newsreader · Instrument' },
+  garamond:   { serif: Type.serif, display: Type.serif,  label: 'EB Garamond' },
+  cormorant:  { serif: Type.serif, display: Type.serif,  label: 'Cormorant Garamond' },
+};
