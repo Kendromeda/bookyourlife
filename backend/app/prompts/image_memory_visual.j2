@@ -24,9 +24,9 @@ Push the emotion more strongly with bolder lighting, color, atmosphere, and symb
 {% endif %}
 
 User direction:
-{{ prompt or "Use the entry as the source of truth." }}
+{{ prompt or "Create an abstract emotional visual from this memory. If a source photo is uploaded, preserve the original scene and only change the art style. Do not add new people, objects, text, logos, or extra details." }}
 
-Journal entry:
+Journal entry context:
 {{ body }}
 
-Make the image feel personal, reflective, and specific to the memory. {% if has_source_image %}Use the uploaded photo as the main visual reference. Preserve the original subject, composition, objects, people, pose, setting, and overall memory. Do not crop important parts of the image.{% endif %} Do not add any new person, object, animal, building, text, logo, decorative element, watermark, or UI. Do not remove important existing parts of the image. Only reinterpret the visual style, texture, lighting, color, and medium. If the entry is sensitive, keep the transformation respectful and grounded.
+Use the journal entry only as private context for mood, tone, and emotional meaning. Do not copy the entry text as the image prompt. Do not turn every sentence into literal visual objects. {% if has_source_image %}Use the uploaded photo as the main visual reference. Preserve the original subject, composition, objects, people, pose, setting, and overall memory. Do not crop important parts of the image.{% else %}If there is no source image, keep the result abstract or symbolic instead of inventing a literal scene.{% endif %} Do not add any new person, object, animal, building, text, logo, decorative element, watermark, or UI. Do not remove important existing parts of the image. Only reinterpret the visual style, texture, lighting, color, and medium. If the entry is sensitive, keep the transformation respectful and grounded.

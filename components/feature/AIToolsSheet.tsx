@@ -50,6 +50,8 @@ type Props = {
 
 const MIN_TEXT_BODY_LENGTH = 50;
 const MIN_IMAGE_PROMPT_LENGTH = 10;
+const DEFAULT_IMAGE_PROMPT =
+  'Create an abstract emotional visual from this memory. If a source photo is uploaded, preserve the original scene and only change the art style. Do not add new people, objects, text, logos, or extra details.';
 
 const IMAGE_STYLES: { value: ImageStyle; label: string; preview: ImageSourcePropType }[] = [
   {
@@ -116,7 +118,7 @@ export function AIToolsSheet({
     }
 
     if (tool === 'image') {
-      setImagePrompt(trimmedBody.slice(0, 1200));
+      setImagePrompt(DEFAULT_IMAGE_PROMPT);
       setGeneratedImage(null);
       setImagePhase('idle');
       setError(null);
@@ -392,7 +394,7 @@ function ImageForm({
       <TextInput
         value={imagePrompt}
         onChangeText={onPromptChange}
-        placeholder="Describe the memory, mood, or symbol you want to visualize."
+        placeholder="Write a visual direction. Do not paste the full journal entry here."
         placeholderTextColor="#9ca3af"
         style={styles.promptInput}
         multiline
