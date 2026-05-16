@@ -10,7 +10,6 @@ import {
 } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -22,6 +21,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,6 +54,8 @@ type Photo = {
   storage_key: string | null;
   uploading: boolean;
   existing_id?: string;
+  width?: number | null;
+  height?: number | null;
 };
 
 function makeId(): string {
@@ -117,8 +119,10 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const qc = useQueryClient();
   const { t } = useTranslation();
+  const editorContentWidth = Math.max(0, windowWidth - Spacing.lg * 2);
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -165,6 +169,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         storage_key: p.storage_key,
         uploading: false,
         existing_id: p.id,
+        width: null,
+        height: null,
       })),
     );
     setVideos(
@@ -231,7 +237,17 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     if (result.canceled) return;
     const asset = result.assets[0];
     const photoId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setPhotos((p) => [...p, { id: photoId, uri: asset.uri, storage_key: null, uploading: true }]);
+    setPhotos((p) => [
+      ...p,
+      {
+        id: photoId,
+        uri: asset.uri,
+        storage_key: null,
+        uploading: true,
+        width: asset.width ?? null,
+        height: asset.height ?? null,
+      },
+    ]);
     try {
       const uploaded = await uploadPhoto(asset.uri, asset.mimeType ?? 'image/jpeg', 'entry-photo');
       setPhotos((p) =>
@@ -550,12 +566,25 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         {photos.length > 0 && (
           <View style={styles.photoGrid}>
             {photos.map((p) => {
+              const aspectRatio = getPhotoAspectRatio(p);
               const slotStyle =
                 photos.length === 1
-                  ? styles.photoSlotFull
+                  ? [
+                      styles.photoSlotFull,
+                      {
+                        width: editorContentWidth,
+                        aspectRatio,
+                      },
+                    ]
                   : photos.length === 2
-                  ? styles.photoSlotHalf
-                  : styles.photoSlotGrid;
+                    ? [
+                        styles.photoSlotHalf,
+                        { width: (editorContentWidth - Spacing.sm) / 2 },
+                      ]
+                    : [
+                        styles.photoSlotGrid,
+                        { width: (editorContentWidth - Spacing.sm * 2) / 3 },
+                      ];
               return (
                 <View key={p.id} style={slotStyle}>
                   <Image source={{ uri: p.uri }} style={styles.photoThumb} resizeMode="contain" />
@@ -757,6 +786,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
               uri: image.public_url,
               storage_key: image.storage_key,
               uploading: false,
+              width: 1,
+              height: 1,
             },
           ])
         }
@@ -764,6 +795,15 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     </KeyboardAvoidingView>
   );
 });
+
+function getPhotoAspectRatio(photo: Photo): number {
+  const width = photo.width ?? 0;
+  const height = photo.height ?? 0;
+  if (width > 0 && height > 0) {
+    return width / height;
+  }
+  return 1;
+}
 
 function ToolbarBtn({
   icon,
@@ -882,21 +922,18 @@ const styles = StyleSheet.create({
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.lg },
   photoSlotFull: {
     width: '100%',
-    height: Math.round((Dimensions.get('window').width - Spacing.lg * 2) * 0.66),
     borderRadius: Radii.md,
     overflow: 'hidden',
     backgroundColor: '#f3f4f6',
   },
   photoSlotHalf: {
-    width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
-    height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm) / 2,
+    aspectRatio: 1,
     borderRadius: Radii.md,
     overflow: 'hidden',
     backgroundColor: '#f3f4f6',
   },
   photoSlotGrid: {
-    width: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
-    height: (Dimensions.get('window').width - Spacing.lg * 2 - Spacing.sm * 2) / 3,
+    aspectRatio: 1,
     borderRadius: Radii.md,
     overflow: 'hidden',
     backgroundColor: '#f3f4f6',
