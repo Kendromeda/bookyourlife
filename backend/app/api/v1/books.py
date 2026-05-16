@@ -13,6 +13,7 @@ from app.schemas.book import (
     BookPreviewResponse,
     BookTweaksUpdate,
 )
+from app.services.storage.r2 import get_r2_storage
 from app.tasks.book_gen import generate_book
 
 router = APIRouter()
@@ -28,7 +29,36 @@ async def _load_book(book_id: UUID, user_id: UUID, session) -> Book:
 
 
 def _serialize(book: Book) -> BookPreviewResponse:
+    """Project a Book row into the API response.
+
+    Illustrations are stored as bare R2 object keys in the database
+    (mirrors entry_photos) and rewritten to public_url at response time
+    so the frontend never has to compose CDN URLs. Storage_key stays on
+    the wire too — needed for any future delete / re-upload flow.
+    """
     data = book.preview_data or {}
+    storage = None
+    illustrations: dict = {}
+    for slot_id, entry in (book.illustrations or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("storage_key")
+        if not key:
+            continue
+        # Tolerate legacy rows that stored a full URL under "storage_key"
+        # (the pre-Phase-2 shape) — pass it through unchanged so old
+        # books still render.
+        if str(key).startswith("http"):
+            public = key
+        else:
+            if storage is None:
+                storage = get_r2_storage()
+            public = storage.public_url(key)
+        illustrations[slot_id] = {
+            "storage_key": key,
+            "public_url": public,
+            **({"crop": entry["crop"]} if entry.get("crop") is not None else {}),
+        }
     return BookPreviewResponse(
         id=book.id,
         status=book.status,  # type: ignore[arg-type]
@@ -44,7 +74,7 @@ def _serialize(book: Book) -> BookPreviewResponse:
         media_pages=data.get("media_pages", []),
         reflection=data.get("reflection", {}),
         error=book.error,
-        illustrations=book.illustrations or {},
+        illustrations=illustrations,
         tweaks=book.tweaks or {},
     )
 
@@ -85,6 +115,29 @@ async def create_book_preview(
         ) from exc
 
     return BookPreviewCreateResponse(book_id=book.id)
+
+
+@router.get("/previews/latest", response_model=BookPreviewResponse | None)
+async def get_latest_book_preview(
+    user: CurrentUser,
+    session: SessionDep,
+) -> BookPreviewResponse | None:
+    """Return the user's most recent book preview, or null if they have none.
+
+    Declared BEFORE /previews/{book_id} so FastAPI matches the literal
+    'latest' path instead of trying to parse it as a UUID.
+    """
+    book = (
+        await session.execute(
+            select(Book)
+            .where(Book.user_id == user.id)
+            .order_by(Book.created_at.desc())
+            .limit(1),
+        )
+    ).scalar_one_or_none()
+    if book is None:
+        return None
+    return _serialize(book)
 
 
 @router.get("/previews/{book_id}", response_model=BookPreviewResponse)

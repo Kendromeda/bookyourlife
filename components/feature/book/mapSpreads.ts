@@ -7,6 +7,12 @@ import type { BookPreview, BookPreviewChapter, BookPreviewMediaItem } from '@/ut
  * contents, then per-chapter (opener + body + optional pull-quote)
  * with photo plates interleaved, then a colophon.
  */
+export type MediaListItem = {
+  type: 'audio' | 'video';
+  caption: string | null;
+  transcript: string | null;
+};
+
 export type SpreadDescriptor =
   | { kind: 'cover'; title: string; author: string; year: string }
   | { kind: 'copyright'; year: string; entryCount: number; wordCount: number }
@@ -22,30 +28,41 @@ export type SpreadDescriptor =
   | { kind: 'body'; chapterTitle: string; verso: string; recto: string; bookTitle: string; pageStart: number }
   | { kind: 'pullquote'; chapterTitle: string; quote: string; bookTitle: string }
   | { kind: 'plate'; slotId: string; caption: string; bodyChapterTitle: string; body: string; bookTitle: string }
+  | { kind: 'mediaList'; bookTitle: string; items: MediaListItem[] }
   | { kind: 'colophon'; author: string; entryCount: number; wordCount: number; year: string };
 
 const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const MEDIA_ITEMS_PER_PAGE = 3;
 
 function chapterNumberLabel(i: number): string {
   return NUMBER_WORDS[i] ?? String(i + 1);
-}
-
-/** Split a long narrative roughly in half on a sentence boundary. */
-function splitNarrative(text: string): { verso: string; recto: string } {
-  const trimmed = text.trim();
-  if (trimmed.length < 800) return { verso: trimmed, recto: '' };
-  const midpoint = Math.floor(trimmed.length / 2);
-  // Find the closest sentence break after the midpoint.
-  const after = trimmed.slice(midpoint);
-  const breakAt = after.search(/[.!?]\s/);
-  const cut = breakAt < 0 ? midpoint : midpoint + breakAt + 2;
-  return { verso: trimmed.slice(0, cut).trim(), recto: trimmed.slice(cut).trim() };
 }
 
 function leadParagraph(narrative: string): string {
   const firstBreak = narrative.search(/\n\n|\.\s/);
   const cut = firstBreak < 0 ? narrative.length : firstBreak + 1;
   return narrative.slice(0, Math.min(cut, 220)).trim();
+}
+
+/**
+ * Split a narrative into body spread halves. The chapter-opener already
+ * shows `leadParagraph(narrative)`, so the body spread renders the
+ * REMAINDER — never the whole narrative. For long remainders the half-
+ * sentence-boundary split fills both pages; short remainders fill verso
+ * and leave recto with a quiet asterism so every chapter gets a body
+ * spread regardless of length (no silent content drops).
+ */
+function bodyHalves(narrative: string, lead: string): { verso: string; recto: string } {
+  const trimmed = narrative.trim();
+  // Drop the already-shown lead from the body if it sits at the start.
+  const after = trimmed.startsWith(lead) ? trimmed.slice(lead.length).trim() : trimmed;
+  if (!after) return { verso: '', recto: '' };
+  if (after.length < 600) return { verso: after, recto: '' };
+  const midpoint = Math.floor(after.length / 2);
+  const tail = after.slice(midpoint);
+  const breakAt = tail.search(/[.!?]\s/);
+  const cut = breakAt < 0 ? midpoint : midpoint + breakAt + 2;
+  return { verso: after.slice(0, cut).trim(), recto: after.slice(cut).trim() };
 }
 
 function inferPullQuote(chapter: BookPreviewChapter): string | null {
@@ -59,6 +76,14 @@ function inferPullQuote(chapter: BookPreviewChapter): string | null {
 
 function chapterSlotId(chapterIndex: number): string {
   return `bml-chapter-${chapterIndex + 1}-photo`;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
 }
 
 function plateSlotId(mediaIndex: number): string {
@@ -117,8 +142,13 @@ export function mapPreviewToSpreads({
       slotPlaceholder: `Drop a photo for "${chapter.title}"`,
     });
 
-    const { verso, recto } = splitNarrative(chapter.narrative);
-    if (recto) {
+    const lead = leadParagraph(chapter.narrative);
+    const { verso, recto } = bodyHalves(chapter.narrative, lead);
+    // Always emit a body spread when there is body content beyond the lead,
+    // even for short chapters — recto may be empty (the renderer falls back
+    // to an asterism so the page never reads "missing"). This avoids the
+    // silent drop where short chapters lost the bulk of their narrative.
+    if (verso || recto) {
       spreads.push({
         kind: 'body',
         chapterTitle: chapter.title,
@@ -127,7 +157,7 @@ export function mapPreviewToSpreads({
         bookTitle: title,
         pageStart: pageCounter,
       });
-      pageCounter += 4;
+      pageCounter += 2;
     }
 
     const quote = inferPullQuote(chapter);
@@ -148,6 +178,33 @@ export function mapPreviewToSpreads({
       });
     }
   });
+
+  // Audio / video memories — collected into a single "Media Memories"
+  // spread before the colophon so non-photo media gets its own real page
+  // rather than being silently dropped by the photo-only plate filter.
+  const audioVideo: MediaListItem[] = preview.media_pages
+    .filter((m) => m.type === 'audio' || m.type === 'video')
+    .map((m) => ({
+      type: m.type as 'audio' | 'video',
+      caption: m.caption,
+      transcript: m.transcript,
+    }));
+  const audioChunks = chunk(
+    audioVideo.filter((m) => m.type === 'audio'),
+    MEDIA_ITEMS_PER_PAGE,
+  );
+  const videoChunks = chunk(
+    audioVideo.filter((m) => m.type === 'video'),
+    MEDIA_ITEMS_PER_PAGE,
+  );
+  const mediaSpreadCount = Math.max(audioChunks.length, videoChunks.length);
+  for (let i = 0; i < mediaSpreadCount; i++) {
+    spreads.push({
+      kind: 'mediaList',
+      bookTitle: title,
+      items: [...(audioChunks[i] ?? []), ...(videoChunks[i] ?? [])],
+    });
+  }
 
   spreads.push({
     kind: 'colophon',

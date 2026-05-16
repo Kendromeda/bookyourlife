@@ -27,7 +27,10 @@ export type BookIllustrationCrop = {
 };
 
 export type BookIllustration = {
+  /** Raw R2 object key — the bucket-relative path. Use this for delete/replace. */
   storage_key: string;
+  /** Public URL to render. Computed server-side from storage_key. */
+  public_url: string;
   crop?: BookIllustrationCrop;
 };
 
@@ -87,6 +90,17 @@ export async function createBookPreview(input: CreateBookPreviewInput): Promise<
 export async function fetchBookPreview(bookId: string): Promise<BookPreview> {
   const { data } = await api.get<BookPreview>(`/books/previews/${bookId}`);
   return data;
+}
+
+/**
+ * Most recent book preview for the signed-in user, or null if they
+ * haven't generated anything yet. Used on /book mount so a queued or
+ * processing preview resumes its polling automatically without the user
+ * having to re-trigger generation.
+ */
+export async function fetchLatestBookPreview(): Promise<BookPreview | null> {
+  const { data } = await api.get<BookPreview | null>('/books/previews/latest');
+  return data ?? null;
 }
 
 export async function updateBookIllustration(

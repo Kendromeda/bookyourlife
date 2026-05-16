@@ -83,6 +83,8 @@ export function BookSpread(props: RenderInputs) {
       return renderPullQuote(props, descriptor);
     case 'plate':
       return renderPlate(props, descriptor);
+    case 'mediaList':
+      return renderMediaList(props, descriptor);
     case 'colophon':
       return renderColophon(props, descriptor);
     default: {
@@ -473,6 +475,8 @@ function renderBody(
   { style, pageW, pageH }: RenderInputs,
   d: Extract<SpreadDescriptor, { kind: 'body' }>,
 ) {
+  // Short chapters produce only a verso half — render recto as a quiet
+  // asterism instead of a blank page so the spread doesn't read "missing".
   return (
     <Spread style={style} pageW={pageW} pageH={pageH}>
       <BookPage side="verso" style={style} width={pageW} height={pageH}>
@@ -482,7 +486,30 @@ function renderBody(
       </BookPage>
       <BookPage side="recto" style={style} width={pageW} height={pageH}>
         <RunHead side="recto" style={style}>{d.bookTitle}</RunHead>
-        <TextFrame style={style}>{d.recto}</TextFrame>
+        {d.recto ? (
+          <TextFrame style={style}>{d.recto}</TextFrame>
+        ) : (
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              alignItems: 'center',
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: style.serif,
+                fontSize: 14,
+                letterSpacing: 8,
+                color: style.ribbon,
+              }}
+            >
+              * * *
+            </Text>
+          </View>
+        )}
         <Folio side="recto" n={d.pageStart + 1} style={style} />
       </BookPage>
     </Spread>
@@ -604,6 +631,119 @@ function renderPlate(
         <TextFrame style={style}>{d.body}</TextFrame>
       </BookPage>
     </Spread>
+  );
+}
+
+// ── Media memories ──────────────────────────────────────────────────
+function renderMediaList(
+  { style, pageW, pageH }: RenderInputs,
+  d: Extract<SpreadDescriptor, { kind: 'mediaList' }>,
+) {
+  // One chunk of voice notes + videos. mapPreviewToSpreads creates as
+  // many mediaList spreads as needed so rows do not clip inside the page.
+  // Verso is audio, recto is video, so each medium gets its own tone.
+  const audios = d.items.filter((m) => m.type === 'audio');
+  const videos = d.items.filter((m) => m.type === 'video');
+  return (
+    <Spread style={style} pageW={pageW} pageH={pageH}>
+      <BookPage side="verso" style={style} width={pageW} height={pageH}>
+        <RunHead side="verso" style={style}>Media memories</RunHead>
+        <View style={{ position: 'absolute', top: 70, left: 38, right: 38, bottom: 60 }}>
+          <Text
+            style={{
+              fontFamily: style.display,
+              fontStyle: 'italic',
+              fontSize: 24,
+              color: style.ink,
+              marginBottom: 16,
+            }}
+          >
+            Voice
+          </Text>
+          {audios.length === 0 ? (
+            <Text style={{ fontFamily: style.serif, fontSize: 12.5, color: style.faint, fontStyle: 'italic' }}>
+              No voice notes captured.
+            </Text>
+          ) : (
+            audios.map((m, i) => <MediaRow key={`a-${i}`} item={m} index={i + 1} style={style} />)
+          )}
+        </View>
+      </BookPage>
+      <BookPage side="recto" style={style} width={pageW} height={pageH}>
+        <RunHead side="recto" style={style}>{d.bookTitle}</RunHead>
+        <View style={{ position: 'absolute', top: 70, left: 38, right: 38, bottom: 60 }}>
+          <Text
+            style={{
+              fontFamily: style.display,
+              fontStyle: 'italic',
+              fontSize: 24,
+              color: style.ink,
+              marginBottom: 16,
+            }}
+          >
+            Moving image
+          </Text>
+          {videos.length === 0 ? (
+            <Text style={{ fontFamily: style.serif, fontSize: 12.5, color: style.faint, fontStyle: 'italic' }}>
+              No video memories captured.
+            </Text>
+          ) : (
+            videos.map((m, i) => <MediaRow key={`v-${i}`} item={m} index={i + 1} style={style} />)
+          )}
+        </View>
+      </BookPage>
+    </Spread>
+  );
+}
+
+function MediaRow({
+  item,
+  index,
+  style,
+}: {
+  item: import('./mapSpreads').MediaListItem;
+  index: number;
+  style: BookViewerStyle;
+}) {
+  return (
+    <View style={{ marginBottom: 14, gap: 4 }}>
+      <Text
+        style={{
+          fontFamily: Type.mono,
+          fontSize: 9,
+          letterSpacing: 1.6,
+          color: style.ribbonDark,
+          textTransform: 'uppercase',
+        }}
+      >
+        {item.type === 'audio' ? 'Voice note' : 'Video'} · {String(index).padStart(2, '0')}
+      </Text>
+      <Text
+        style={{
+          fontFamily: style.serif,
+          fontSize: 13,
+          color: style.ink,
+          lineHeight: 19,
+        }}
+        numberOfLines={3}
+      >
+        {item.caption || (item.transcript ? `“${item.transcript}”` : 'Untitled')}
+      </Text>
+      {item.caption && item.transcript ? (
+        <Text
+          style={{
+            fontFamily: style.serif,
+            fontStyle: 'italic',
+            fontSize: 12,
+            color: style.soft,
+            lineHeight: 17,
+          }}
+          numberOfLines={2}
+        >
+          “{item.transcript}”
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

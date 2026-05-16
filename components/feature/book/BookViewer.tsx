@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -55,19 +56,33 @@ export function BookViewer({ preview, authorName, totalEntries, totalWords, onCl
 
   const style = resolveBookStyle(preview.tweaks);
 
-  // Compute one page's width so the open spread (two pages) fits the
-  // device with margins for controls and label.
+  // Layout: on narrow widths (phones in portrait) we render one page at a
+  // time inside a horizontally paged ScrollView so each page fills the
+  // screen — the previous 2-up math left ~90 usable px of text width and
+  // produced cropped serif body type. On wider devices (tablets / web)
+  // we keep the classic book spread.
   const dims = useMemo(() => {
-    // Reserve 200px vertical for label+controls+padding, then derive
-    // page width from remaining height keeping 1:1.4 (typical book).
+    const verticalChrome = 240;
     const horizontalPadding = 16;
-    const availableH = winH - 220;
+    const availableH = winH - verticalChrome;
     const availableW = winW - horizontalPadding * 2;
+    const isSpread = availableW >= 720; // ~tablet portrait or wider
     const targetH = Math.min(availableH, 720);
-    const targetWFromH = (targetH / 1.4) * 2; // two pages side-by-side
-    const pageW = Math.min(availableW, targetWFromH) / 2;
+    if (isSpread) {
+      const targetWFromH = (targetH / 1.4) * 2;
+      const pageW = Math.min(availableW, targetWFromH) / 2;
+      const pageH = pageW * 1.4;
+      return {
+        pageW: Math.floor(pageW),
+        pageH: Math.floor(pageH),
+        isSpread: true as const,
+      };
+    }
+    // Single page mode — page fills the available width.
+    const targetWFromH2 = targetH / 1.4;
+    const pageW = Math.min(availableW, targetWFromH2);
     const pageH = pageW * 1.4;
-    return { pageW: Math.floor(pageW), pageH: Math.floor(pageH) };
+    return { pageW: Math.floor(pageW), pageH: Math.floor(pageH), isSpread: false as const };
   }, [winW, winH]);
 
   const spreads = useMemo(
@@ -78,13 +93,16 @@ export function BookViewer({ preview, authorName, totalEntries, totalWords, onCl
   const current = spreads[Math.min(idx, total - 1)] ?? spreads[0];
   const spreadLabel = useMemo(() => deriveSpreadLabel(current), [current]);
 
-  // Resolve a slot id to its public photo URL.
+  // Render-time URL comes from the backend-computed public_url field;
+  // storage_key remains the bucket-relative key for any future delete /
+  // re-upload flow. Tolerate legacy rows that only have storage_key set
+  // to a full URL (pre-Phase-2 shape) so older books keep rendering.
   const resolveSlot = (slotId: string): string | null => {
     const entry = preview.illustrations[slotId];
-    if (!entry?.storage_key) return null;
-    // Backend stores raw storage_key; if it's already a URL pass through.
-    if (entry.storage_key.startsWith('http')) return entry.storage_key;
-    return null; // Will be filled by next refetch once backend serializes URL.
+    if (!entry) return null;
+    if (entry.public_url) return entry.public_url;
+    if (entry.storage_key && entry.storage_key.startsWith('http')) return entry.storage_key;
+    return null;
   };
 
   const tweakMutation = useMutation({
@@ -115,7 +133,9 @@ export function BookViewer({ preview, authorName, totalEntries, totalWords, onCl
     setBusySlot(slotId);
     try {
       const uploaded = await uploadPhoto(asset.uri, asset.mimeType ?? 'image/jpeg', 'entry-photo');
-      await illuMutation.mutateAsync({ slotId, storageKey: uploaded.public_url });
+      // Persist the raw bucket key — the backend serializes it back to a
+      // public URL in the response so the viewer renders correctly.
+      await illuMutation.mutateAsync({ slotId, storageKey: uploaded.storage_key });
     } finally {
       setBusySlot(null);
     }
@@ -157,9 +177,9 @@ export function BookViewer({ preview, authorName, totalEntries, totalWords, onCl
         </TouchableOpacity>
       </View>
 
-      {/* Book stage */}
+      {/* Book stage — full spread on tablets, paged single-page on phones */}
       <View style={styles.stage}>
-        {current && (
+        {current && dims.isSpread && (
           <BookSpread
             descriptor={current}
             style={style}
@@ -170,6 +190,32 @@ export function BookViewer({ preview, authorName, totalEntries, totalWords, onCl
             onPickSlot={onPickSlot}
             onClearSlot={onClearSlot}
           />
+        )}
+        {current && !dims.isSpread && (
+          // ScrollView width matches one page; the BookSpread inside is
+          // 2*pageW wide and `pagingEnabled` snaps between verso and recto.
+          // Vertical: BookPage already sets its own height — wrap in
+          // alignItems:flex-start so vertical text doesn't clip.
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={{ width: dims.pageW, height: dims.pageH }}
+            // Keep the BookSpread's own width (2*pageW) — ScrollView clips
+            // to its own width and the user swipes between verso & recto.
+            contentContainerStyle={{ width: dims.pageW * 2, height: dims.pageH }}
+          >
+            <BookSpread
+              descriptor={current}
+              style={style}
+              pageW={dims.pageW}
+              pageH={dims.pageH}
+              resolveSlot={resolveSlot}
+              isSlotBusy={(id) => busySlot === id}
+              onPickSlot={onPickSlot}
+              onClearSlot={onClearSlot}
+            />
+          </ScrollView>
         )}
       </View>
 
@@ -250,6 +296,8 @@ function deriveSpreadLabel(d: ReturnType<typeof mapPreviewToSpreads>[number] | u
       return `${d.chapterTitle} · pull quote`;
     case 'plate':
       return 'Plate · body';
+    case 'mediaList':
+      return 'Media memories';
     case 'colophon':
       return 'Colophon';
   }
