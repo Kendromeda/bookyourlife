@@ -158,17 +158,6 @@ export async function fetchBookPreview(bookId: string): Promise<BookPreview> {
   return data;
 }
 
-/**
- * Most recent book preview for the signed-in user, or null if they
- * haven't generated anything yet. Used on /book mount so a queued or
- * processing preview resumes its polling automatically without the user
- * having to re-trigger generation.
- */
-export async function fetchLatestBookPreview(): Promise<BookPreview | null> {
-  const { data } = await api.get<BookPreview | null>('/books/previews/latest');
-  return data ?? null;
-}
-
 export async function updateBookIllustration(
   bookId: string,
   slotId: string,

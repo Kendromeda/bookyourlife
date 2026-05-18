@@ -30,7 +30,6 @@ import {
   fetchGeneratedBook,
   fetchGeneratedBooks,
   fetchBookPreview,
-  fetchLatestBookPreview,
 } from '@/utils/books';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchMe, fetchStats, type Me, type UserStats } from '@/utils/users';
@@ -182,32 +181,10 @@ export default function BookScreen() {
   const [bookId, setBookId] = useState<string | null>(null);
   const [generatedBookId, setGeneratedBookId] = useState<string | null>(null);
   const [pdfOpenError, setPdfOpenError] = useState<string | null>(null);
-  const [ignoredLatestId, setIgnoredLatestId] = useState<string | null>(null);
   // When true the user has tapped "Read book" and we've committed to the
   // viewer for this book. Without this flag, the auto-jump-to-viewer
   // logic would skip the review card entirely.
   const [enteredViewer, setEnteredViewer] = useState(false);
-
-  // On mount fetch the user's latest preview. If they have one in flight
-  // or freshly done, we resume into the same book id so the review card
-  // / viewer feel continuous across reloads and back-navigations.
-  const latestQuery = useQuery<BookPreview | null>({
-    queryKey: ['book-preview', 'latest'],
-    queryFn: fetchLatestBookPreview,
-    staleTime: 30_000,
-  });
-
-  useEffect(() => {
-    if (bookId) return;
-    const latest = latestQuery.data;
-    if (!latest) return;
-    // Skip already-failed previews — the user almost always wants to try
-    // again, so leaving the setup screen visible is the right default.
-    if (latest.status === 'failed') return;
-    if (latest.id === ignoredLatestId) return;
-    setBookId(latest.id);
-    qc.setQueryData(['book-preview', latest.id], latest);
-  }, [latestQuery.data, bookId, ignoredLatestId, qc]);
 
   const generatedBooksQuery = useQuery<GeneratedBook[]>({
     queryKey: ['book-generations'],
@@ -263,10 +240,8 @@ export default function BookScreen() {
       });
     },
     onSuccess: (id) => {
-      setIgnoredLatestId(null);
       setEnteredViewer(false);
       setBookId(id);
-      qc.invalidateQueries({ queryKey: ['book-preview', 'latest'] });
     },
   });
 
@@ -391,7 +366,6 @@ export default function BookScreen() {
               preview={preview}
               onRead={() => setEnteredViewer(true)}
               onRegenerate={() => {
-                setIgnoredLatestId(preview.id);
                 setBookId(null);
                 setEnteredViewer(false);
                 generatePreview.reset();
