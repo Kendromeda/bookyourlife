@@ -449,7 +449,7 @@ async def _llm_or_fallback_plan(
     language: str,
 ) -> dict:
     settings = get_settings()
-    if settings.openai_api_key:
+    if settings.book_generation_ai_enabled and settings.openai_api_key:
         try:
             return _normalize_plan_payload(
                 _generate_plan_with_llm(book, entries, strategy, language),
@@ -502,7 +502,7 @@ async def _llm_or_fallback_texts(
     chapters: list[BookChapter],
 ) -> dict:
     settings = get_settings()
-    if settings.openai_api_key:
+    if settings.book_generation_ai_enabled and settings.openai_api_key:
         try:
             return _generate_texts_with_llm(book, plan, entries, chapters)
         except Exception as exc:

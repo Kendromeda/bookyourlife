@@ -196,6 +196,49 @@ def test_fallback_plan_assigns_all_entries() -> None:
     assert planned_ids == {str(entry.id) for entry in entries}
 
 
+async def test_generation_plan_uses_local_fallback_unless_ai_enabled(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def fail_if_called(*_: object, **__: object) -> dict:
+        raise AssertionError("generation OpenAI should be disabled by default")
+
+    monkeypatch.setattr(book_pipeline, "_generate_plan_with_llm", fail_if_called)
+    monkeypatch.setattr(
+        book_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openai_api_key="sk-test",
+            book_generation_ai_enabled=False,
+        ),
+    )
+    user_id = uuid4()
+    book = Book(
+        id=uuid4(),
+        user_id=user_id,
+        timeframe="custom",
+        style="watercolor",
+        period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        period_end=datetime(2026, 1, 31, tzinfo=UTC),
+        status="queued",
+        config={"flow": "generation"},
+    )
+    entries = [
+        Entry(
+            id=uuid4(),
+            user_id=user_id,
+            body=f"Entry number {index} with enough words to be included.",
+            written_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=index),
+            emotion_tags=[],
+            photos=[],
+            audios=[],
+        )
+        for index in range(20)
+    ]
+
+    plan = await book_pipeline._llm_or_fallback_plan(book, entries, "thematic", "en")
+
+    assert plan["book_title"] == "Life Book 2026"
+    assert plan["chapters"]
+
+
 def test_fallback_enhancement_chooses_diary_style_for_text_only_entry() -> None:
     book = Book(
         id=uuid4(),
