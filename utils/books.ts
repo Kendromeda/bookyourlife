@@ -10,6 +10,15 @@ export type BookTone =
 
 export type BookImageMode = 'abstract' | 'photo_inspired' | 'none';
 export type BookStatus = 'queued' | 'processing' | 'done' | 'failed';
+export type BookGenerationStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+export type BookGenerationMode = 'illustrated' | 'photo_only' | 'mixed';
+export type BookStylePreset = 'watercolor' | 'pencil' | 'vintage' | 'anime';
+export type BookCoverMode = 'ai_mood' | 'best_photo';
 
 export type BookPreviewChapter = {
   title: string;
@@ -82,9 +91,66 @@ export type CreateBookPreviewInput = {
   include_voice_transcripts: boolean;
 };
 
+export type CreateGeneratedBookInput = {
+  date_start: string;
+  date_end: string;
+  mode: BookGenerationMode;
+  style_preset: BookStylePreset;
+  cover_mode: BookCoverMode;
+  include_voice_transcripts: boolean;
+  illustrated_required: boolean;
+  custom_title?: string | null;
+  dedication?: string | null;
+};
+
+export type CreateGeneratedBookResponse = {
+  book_id: string;
+  status: BookGenerationStatus;
+  estimated_minutes: number;
+};
+
+export type GeneratedBook = {
+  book_id: string;
+  status: BookGenerationStatus;
+  progress: number;
+  current_stage: string | null;
+  generated_title: string | null;
+  subtitle: string | null;
+  theme_summary: string | null;
+  pdf_url: string | null;
+  cover_url: string | null;
+  error_message: string | null;
+};
+
 export async function createBookPreview(input: CreateBookPreviewInput): Promise<string> {
   const { data } = await api.post<{ book_id: string }>('/books/previews', input);
   return data.book_id;
+}
+
+export async function createGeneratedBook(
+  input: CreateGeneratedBookInput,
+): Promise<CreateGeneratedBookResponse> {
+  const { data } = await api.post<CreateGeneratedBookResponse>('/books/generate', input);
+  return data;
+}
+
+export async function fetchGeneratedBook(bookId: string): Promise<GeneratedBook> {
+  const { data } = await api.get<GeneratedBook>(`/books/${bookId}`);
+  return data;
+}
+
+export async function fetchGeneratedBooks(
+  status?: BookGenerationStatus,
+): Promise<GeneratedBook[]> {
+  const { data } = await api.get<{ items: GeneratedBook[] }>('/books', {
+    params: status ? { status } : undefined,
+  });
+  return data.items;
+}
+
+export async function cancelGeneratedBook(bookId: string): Promise<GeneratedBook> {
+  const { data } = await api.post<GeneratedBook>(`/books/${bookId}/cancel`);
+  return data;
 }
 
 export async function fetchBookPreview(bookId: string): Promise<BookPreview> {

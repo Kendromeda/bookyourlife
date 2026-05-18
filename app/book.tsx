@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Switch,
@@ -20,8 +21,14 @@ import { Colors, Radii, Spacing, Type } from '@/constants/theme';
 import {
   BookImageMode,
   BookPreview,
+  BookStylePreset,
   BookTone,
+  GeneratedBook,
+  cancelGeneratedBook,
   createBookPreview,
+  createGeneratedBook,
+  fetchGeneratedBook,
+  fetchGeneratedBooks,
   fetchBookPreview,
   fetchLatestBookPreview,
 } from '@/utils/books';
@@ -45,6 +52,15 @@ const IMAGE_MODES: { value: BookImageMode; label: string }[] = [
   { value: 'photo_inspired', label: 'Photo-inspired cover' },
   { value: 'none', label: 'No AI cover' },
 ];
+
+const STYLE_BY_TONE: Record<BookTone, BookStylePreset> = {
+  poetic: 'watercolor',
+  honest: 'pencil',
+  minimalist: 'pencil',
+  cinematic: 'vintage',
+  funny: 'anime',
+  deeply_reflective: 'watercolor',
+};
 
 type PeriodMode = 'month' | 'custom';
 
@@ -94,6 +110,40 @@ function parseYmd(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function dateOnly(value: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  return m?.[1] ?? ymd(new Date(value));
+}
+
+function isBookTone(value: string | null | undefined): value is BookTone {
+  return TONES.some((item) => item.value === value);
+}
+
+function generationStageLabel(stage: string | null | undefined): string {
+  switch (stage) {
+    case 'prepare':
+      return 'Checking entries';
+    case 'transcribe':
+      return 'Checking voice notes';
+    case 'plan':
+      return 'Planning chapters';
+    case 'texts':
+      return 'Writing book text';
+    case 'images':
+      return 'Preparing artwork';
+    case 'render':
+      return 'Rendering PDF';
+    case 'finalize':
+      return 'Saving PDF';
+    case 'notify':
+      return 'Finishing';
+    case 'completed':
+      return 'Ready';
+    default:
+      return 'Starting';
+  }
+}
+
 export default function BookScreen() {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
@@ -130,6 +180,8 @@ export default function BookScreen() {
   const [imageMode, setImageMode] = useState<BookImageMode>('abstract');
   const [includeVoiceTranscripts, setIncludeVoiceTranscripts] = useState(false);
   const [bookId, setBookId] = useState<string | null>(null);
+  const [generatedBookId, setGeneratedBookId] = useState<string | null>(null);
+  const [pdfOpenError, setPdfOpenError] = useState<string | null>(null);
   const [ignoredLatestId, setIgnoredLatestId] = useState<string | null>(null);
   // When true the user has tapped "Read book" and we've committed to the
   // viewer for this book. Without this flag, the auto-jump-to-viewer
@@ -157,6 +209,20 @@ export default function BookScreen() {
     qc.setQueryData(['book-preview', latest.id], latest);
   }, [latestQuery.data, bookId, ignoredLatestId, qc]);
 
+  const generatedBooksQuery = useQuery<GeneratedBook[]>({
+    queryKey: ['book-generations'],
+    queryFn: () => fetchGeneratedBooks(),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (generatedBookId) return;
+    const latest = generatedBooksQuery.data?.[0];
+    if (!latest) return;
+    setGeneratedBookId(latest.book_id);
+    qc.setQueryData(['book-generation', latest.book_id], latest);
+  }, [generatedBooksQuery.data, generatedBookId, qc]);
+
   const previewQuery = useQuery<BookPreview>({
     queryKey: ['book-preview', bookId],
     queryFn: () => fetchBookPreview(bookId!),
@@ -171,7 +237,19 @@ export default function BookScreen() {
     },
   });
 
-  const generate = useMutation({
+  const generationQuery = useQuery<GeneratedBook>({
+    queryKey: ['book-generation', generatedBookId],
+    queryFn: () => fetchGeneratedBook(generatedBookId!),
+    enabled: !!generatedBookId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 3000;
+      if (data.status === 'queued' || data.status === 'processing') return 3000;
+      return false;
+    },
+  });
+
+  const generatePreview = useMutation({
     mutationFn: async () => {
       if (!range.valid || !range.start || !range.end) {
         throw new Error('Pick a valid period first.');
@@ -192,9 +270,81 @@ export default function BookScreen() {
     },
   });
 
+  const generateBook = useMutation({
+    mutationFn: async () => {
+      const previewTone = preview?.status === 'done' && isBookTone(preview.tone) ? preview.tone : tone;
+      const source =
+        preview?.status === 'done' && preview.period_start && preview.period_end
+          ? {
+              date_start: dateOnly(preview.period_start),
+              date_end: ymd(addDays(new Date(preview.period_end), -1)),
+            }
+          : null;
+      if (!source && (!range.valid || !range.start || !range.end)) {
+        throw new Error('Pick a valid period first.');
+      }
+      const date_start = source?.date_start ?? ymd(range.start!);
+      const date_end = source?.date_end ?? ymd(addDays(range.end!, -1));
+      return createGeneratedBook({
+        date_start,
+        date_end,
+        mode: imageMode === 'none' ? 'photo_only' : 'illustrated',
+        style_preset: STYLE_BY_TONE[previewTone],
+        cover_mode: imageMode === 'photo_inspired' ? 'best_photo' : 'ai_mood',
+        include_voice_transcripts: includeVoiceTranscripts,
+        illustrated_required: false,
+      });
+    },
+    onSuccess: (result) => {
+      setPdfOpenError(null);
+      setGeneratedBookId(result.book_id);
+      qc.setQueryData(['book-generation', result.book_id], {
+        book_id: result.book_id,
+        status: result.status,
+        progress: 0,
+        current_stage: 'queued',
+        generated_title: null,
+        subtitle: null,
+        theme_summary: null,
+        pdf_url: null,
+        cover_url: null,
+        error_message: null,
+      } satisfies GeneratedBook);
+      qc.invalidateQueries({ queryKey: ['book-generations'] });
+    },
+  });
+
+  const cancelGeneration = useMutation({
+    mutationFn: async (id: string) => cancelGeneratedBook(id),
+    onSuccess: (book) => {
+      setPdfOpenError(null);
+      qc.setQueryData(['book-generation', book.book_id], book);
+      qc.invalidateQueries({ queryKey: ['book-generations'] });
+    },
+  });
+
   const preview = previewQuery.data;
-  const busy =
-    generate.isPending || preview?.status === 'queued' || preview?.status === 'processing';
+  const generatedBook = generationQuery.data;
+  const previewBusy =
+    generatePreview.isPending || preview?.status === 'queued' || preview?.status === 'processing';
+  const generationBusy =
+    generateBook.isPending ||
+    generatedBook?.status === 'queued' ||
+    generatedBook?.status === 'processing';
+
+  const openGeneratedPdf = async (url: string) => {
+    setPdfOpenError(null);
+    if (url.startsWith('file://')) {
+      setPdfOpenError('The PDF was created on the backend local disk. Configure R2 storage to open it from this device.');
+      return;
+    }
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      setPdfOpenError('This device cannot open the generated PDF URL.');
+      return;
+    }
+    await Linking.openURL(url);
+  };
 
   const meQuery = useQuery<Me>({
     queryKey: ['me'],
@@ -236,26 +386,45 @@ export default function BookScreen() {
 
       <ScrollView contentContainerStyle={styles.container}>
         {preview?.status === 'done' ? (
-          <ReviewCard
-            preview={preview}
-            onRead={() => setEnteredViewer(true)}
-            onRegenerate={() => {
-              setIgnoredLatestId(preview.id);
-              setBookId(null);
-              setEnteredViewer(false);
-              generate.reset();
-            }}
-          />
+          <>
+            <ReviewCard
+              preview={preview}
+              onRead={() => setEnteredViewer(true)}
+              onRegenerate={() => {
+                setIgnoredLatestId(preview.id);
+                setBookId(null);
+                setEnteredViewer(false);
+                generatePreview.reset();
+              }}
+            />
+            <GenerationBlock
+              book={generatedBook}
+              starting={generateBook.isPending}
+              cancelling={cancelGeneration.isPending}
+              disabled={generationBusy}
+              generateError={generateBook.error}
+              pdfOpenError={pdfOpenError}
+              generateLabel="Generate PDF from this period"
+              onGenerate={() => generateBook.mutate()}
+              onCancel={
+                generatedBook &&
+                (generatedBook.status === 'queued' || generatedBook.status === 'processing')
+                  ? () => cancelGeneration.mutate(generatedBook.book_id)
+                  : undefined
+              }
+              onOpenPdf={(url) => openGeneratedPdf(url)}
+            />
+          </>
         ) : (
           <>
             <View style={styles.hero}>
-              <Text style={[styles.eyebrow, { color: c.accentDark }]}>BOOK PREVIEW</Text>
+              <Text style={[styles.eyebrow, { color: c.accentDark }]}>BOOK GENERATION</Text>
               <Text style={[styles.heroTitle, { color: c.text, fontFamily: Type.serif }]}>
-                Turn this month into a chapter.
+                Turn this period into a finished PDF book.
               </Text>
               <Text style={[styles.heroSub, { color: c.textSoft }]}>
-                Generate a memoir-style preview with a title, opening letter, thematic chapters,
-                media pages, and a reflection ending.
+                Build a print-style Life Book from your entries. You can still create an in-app
+                preview first if you want to read it before rendering the PDF.
               </Text>
             </View>
 
@@ -340,28 +509,72 @@ export default function BookScreen() {
               style={[
                 styles.cta,
                 { backgroundColor: c.accent },
-                (busy || !range.valid) && styles.disabled,
+                (generationBusy || !range.valid) && styles.disabled,
               ]}
               activeOpacity={0.85}
-              disabled={busy || !range.valid}
-              onPress={() => generate.mutate()}
+              disabled={generationBusy || !range.valid}
+              onPress={() => generateBook.mutate()}
             >
-              {busy ? <ActivityIndicator color="#fff" /> : null}
+              {generationBusy ? <ActivityIndicator color="#fff" /> : null}
               <Text style={styles.ctaLabel}>
-                {busy
-                  ? preview?.status === 'queued'
-                    ? 'Queued…'
-                    : preview?.status === 'processing'
-                      ? 'Writing your book…'
-                      : 'Sending to the writer…'
-                  : 'Generate preview'}
+                {generationBusy
+                  ? generatedBook?.status === 'queued'
+                    ? 'Queued...'
+                    : generatedBook?.status === 'processing'
+                      ? `${generationStageLabel(generatedBook.current_stage)} ${generatedBook.progress}%`
+                      : 'Starting...'
+                  : 'Generate PDF book'}
               </Text>
             </TouchableOpacity>
 
-            {generate.error ? (
+            {generateBook.error ? (
               <Text style={[styles.error, { color: c.danger }]}>
-                {generate.error instanceof Error
-                  ? generate.error.message
+                {generateBook.error instanceof Error
+                  ? generateBook.error.message
+                  : 'Could not start book generation.'}
+              </Text>
+            ) : null}
+
+            {generatedBook ? (
+              <GenerationStatusCard
+                book={generatedBook}
+                pdfOpenError={pdfOpenError}
+                cancelling={cancelGeneration.isPending}
+                onCancel={
+                  generatedBook.status === 'queued' || generatedBook.status === 'processing'
+                    ? () => cancelGeneration.mutate(generatedBook.book_id)
+                    : undefined
+                }
+                onOpenPdf={(url) => openGeneratedPdf(url)}
+              />
+            ) : null}
+
+            <TouchableOpacity
+              style={[
+                styles.secondaryCta,
+                { borderColor: c.border },
+                (previewBusy || !range.valid) && styles.disabled,
+              ]}
+              activeOpacity={0.85}
+              disabled={previewBusy || !range.valid}
+              onPress={() => generatePreview.mutate()}
+            >
+              {previewBusy ? <ActivityIndicator color={c.text} /> : null}
+              <Text style={[styles.secondaryCtaLabel, { color: c.text }]}>
+                {previewBusy
+                  ? preview?.status === 'queued'
+                    ? 'Preview queued...'
+                    : preview?.status === 'processing'
+                      ? 'Writing preview...'
+                      : 'Starting preview...'
+                  : 'Generate in-app preview'}
+              </Text>
+            </TouchableOpacity>
+
+            {generatePreview.error ? (
+              <Text style={[styles.error, { color: c.danger }]}>
+                {generatePreview.error instanceof Error
+                  ? generatePreview.error.message
                   : 'Could not start preview.'}
               </Text>
             ) : null}
@@ -529,6 +742,194 @@ function ReviewCard({
   );
 }
 
+function GenerationBlock({
+  book,
+  starting,
+  cancelling,
+  disabled,
+  generateError,
+  pdfOpenError,
+  generateLabel,
+  onGenerate,
+  onCancel,
+  onOpenPdf,
+}: {
+  book: GeneratedBook | undefined;
+  starting: boolean;
+  cancelling: boolean;
+  disabled: boolean;
+  generateError: unknown;
+  pdfOpenError: string | null;
+  generateLabel: string;
+  onGenerate: () => void;
+  onCancel?: () => void;
+  onOpenPdf: (url: string) => void;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  const ready = book?.status === 'completed' && !!book.pdf_url;
+  const active = book?.status === 'queued' || book?.status === 'processing';
+  return (
+    <View style={[styles.generationBlock, { borderColor: c.border, backgroundColor: c.surface }]}>
+      <Text style={[styles.eyebrow, { color: c.accentDark }]}>PDF BOOK</Text>
+      {book ? (
+        <GenerationStatusBody book={book} />
+      ) : (
+        <Text style={[styles.bodyText, { color: c.textSoft }]}>
+          PDF generation runs in the backend and needs at least 20 entries in the selected period.
+        </Text>
+      )}
+
+      <TouchableOpacity
+        style={[
+          styles.cta,
+          { backgroundColor: c.accent },
+          ((disabled && !ready) || starting) && styles.disabled,
+        ]}
+        activeOpacity={0.85}
+        disabled={(disabled && !ready) || starting}
+        onPress={() => {
+          if (ready) {
+            onOpenPdf(book.pdf_url!);
+            return;
+          }
+          onGenerate();
+        }}
+      >
+        {starting || active ? <ActivityIndicator color="#fff" /> : null}
+        <Text style={styles.ctaLabel}>
+          {ready
+            ? 'Open PDF'
+            : active
+              ? `${generationStageLabel(book.current_stage)} ${book.progress}%`
+              : generateLabel}
+        </Text>
+      </TouchableOpacity>
+
+      {onCancel ? (
+        <TouchableOpacity
+          style={[styles.secondaryCta, { borderColor: c.border }, cancelling && styles.disabled]}
+          activeOpacity={0.85}
+          disabled={cancelling}
+          onPress={onCancel}
+        >
+          <Text style={[styles.secondaryCtaLabel, { color: c.text }]}>
+            {cancelling ? 'Cancelling...' : 'Cancel generation'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {generateError ? (
+        <Text style={[styles.error, { color: c.danger }]}>
+          {generateError instanceof Error ? generateError.message : 'Could not start book generation.'}
+        </Text>
+      ) : null}
+      {pdfOpenError ? <Text style={[styles.error, { color: c.danger }]}>{pdfOpenError}</Text> : null}
+    </View>
+  );
+}
+
+function GenerationStatusCard({
+  book,
+  pdfOpenError,
+  cancelling,
+  onCancel,
+  onOpenPdf,
+}: {
+  book: GeneratedBook;
+  pdfOpenError: string | null;
+  cancelling: boolean;
+  onCancel?: () => void;
+  onOpenPdf: (url: string) => void;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  return (
+    <View style={[styles.previewBlock, { borderColor: c.border, backgroundColor: c.surface }]}>
+      <GenerationStatusBody book={book} />
+      {book.status === 'completed' && book.pdf_url ? (
+        <TouchableOpacity
+          style={[styles.secondaryCta, { borderColor: c.border }]}
+          activeOpacity={0.85}
+          onPress={() => onOpenPdf(book.pdf_url!)}
+        >
+          <Text style={[styles.secondaryCtaLabel, { color: c.text }]}>Open PDF</Text>
+        </TouchableOpacity>
+      ) : null}
+      {onCancel ? (
+        <TouchableOpacity
+          style={[styles.secondaryCta, { borderColor: c.border }, cancelling && styles.disabled]}
+          activeOpacity={0.85}
+          disabled={cancelling}
+          onPress={onCancel}
+        >
+          <Text style={[styles.secondaryCtaLabel, { color: c.text }]}>
+            {cancelling ? 'Cancelling...' : 'Cancel generation'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+      {pdfOpenError ? <Text style={[styles.error, { color: c.danger }]}>{pdfOpenError}</Text> : null}
+    </View>
+  );
+}
+
+function GenerationStatusBody({ book }: { book: GeneratedBook }) {
+  const scheme = useColorScheme() ?? 'light';
+  const c = Colors[scheme];
+  if (book.status === 'failed') {
+    return (
+      <>
+        <Text style={[styles.previewStatus, { color: c.danger }]}>Book failed</Text>
+        <Text style={[styles.bodyText, { color: c.textSoft }]}>
+          {book.error_message ?? 'Could not generate your PDF book.'}
+        </Text>
+      </>
+    );
+  }
+  if (book.status === 'cancelled') {
+    return (
+      <>
+        <Text style={[styles.previewStatus, { color: c.muted }]}>Book cancelled</Text>
+        <Text style={[styles.bodyText, { color: c.textSoft }]}>
+          Start again when you are ready.
+        </Text>
+      </>
+    );
+  }
+  if (book.status === 'completed') {
+    return (
+      <>
+        <Text style={[styles.previewStatus, { color: c.accentDark }]}>PDF book ready</Text>
+        <Text style={[styles.bodyText, { color: c.text }]}>
+          {book.generated_title ?? 'Your Life Book'}
+        </Text>
+        {book.subtitle ? (
+          <Text style={[styles.bodyText, { color: c.textSoft }]}>{book.subtitle}</Text>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <>
+      <Text style={[styles.previewStatus, { color: c.accentDark }]}>
+        {book.status === 'queued' ? 'Queued' : generationStageLabel(book.current_stage)}
+      </Text>
+      <View style={[styles.progressTrack, { backgroundColor: c.borderSoft }]}>
+        <View
+          style={[
+            styles.progressFill,
+            { backgroundColor: c.accent, width: `${Math.max(3, book.progress)}%` },
+          ]}
+        />
+      </View>
+      <Text style={[styles.bodyText, { color: c.textSoft }]}>
+        {book.progress}% complete. This can take several minutes while the backend writes and
+        renders the PDF.
+      </Text>
+    </>
+  );
+}
+
 function StatusCard({ preview }: { preview: BookPreview }) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
@@ -655,6 +1056,22 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     marginTop: Spacing.lg,
     gap: Spacing.sm,
+  },
+  generationBlock: {
+    borderWidth: 1,
+    borderRadius: Radii.md,
+    padding: Spacing.lg,
+    marginTop: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: Radii.pill,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: Radii.pill,
   },
   previewStatus: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase' },
   bodyText: { fontSize: 14, lineHeight: 21 },
