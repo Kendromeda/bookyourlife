@@ -61,6 +61,7 @@ def test_create_generated_book_sets_generation_flow_and_enqueues(monkeypatch) ->
 
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[get_current_user] = override_user
+    monkeypatch.setattr(books_api, "_generation_worker_ready", lambda: (True, None))
     monkeypatch.setattr(books_api.generate_book_pipeline, "delay", enqueue)
 
     client = TestClient(app)
@@ -82,8 +83,46 @@ def test_create_generated_book_sets_generation_flow_and_enqueues(monkeypatch) ->
     assert created.config["flow"] == "generation"
     assert created.config["language"] == "en"
     assert created.status == "queued"
-    assert created.progress == 0
+    assert created.progress == 1
+    assert created.current_stage == "queued"
     assert enqueued == [str(created.id)]
+
+
+def test_create_generated_book_rejects_when_worker_unavailable(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    app = create_app()
+    fake_session = FakeSession()
+    user = User(id=uuid4(), clerk_id="user_123", preferred_language="en")
+
+    async def override_session():  # type: ignore[no-untyped-def]
+        yield fake_session
+
+    def override_user() -> User:
+        return user
+
+    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_current_user] = override_user
+    monkeypatch.setattr(
+        books_api,
+        "_generation_worker_ready",
+        lambda: (False, "Book queue worker unavailable"),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/books/generate",
+        json={
+            "date_start": "2026-01-01",
+            "date_end": "2026-03-31",
+            "mode": "illustrated",
+            "style_preset": "watercolor",
+            "cover_mode": "ai_mood",
+            "include_voice_transcripts": True,
+            "illustrated_required": False,
+        },
+    )
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert not any(isinstance(item, Book) for item in fake_session.added)
 
 
 def test_preview_filter_excludes_generation_flow() -> None:

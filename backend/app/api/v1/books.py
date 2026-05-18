@@ -29,6 +29,7 @@ router = APIRouter()
 GENERATION_FLOW = "generation"
 PREVIEW_FLOW = "preview"
 GENERATION_ESTIMATED_MINUTES = 8
+GENERATION_WORKER_INSPECT_TIMEOUT_SECONDS = 1.5
 
 
 def _flow_value():  # type: ignore[no-untyped-def]
@@ -156,6 +157,37 @@ async def _generation_detail(book: Book, session) -> BookGenerationDetail:  # ty
     return _serialize_generation(book, plan)
 
 
+def _generation_worker_ready() -> tuple[bool, str | None]:
+    app = generate_book_pipeline.app
+    try:
+        connection = app.connection_for_write()
+        connection.ensure_connection(max_retries=1)
+        connection.release()
+    except Exception as exc:
+        return False, f"Book queue broker unavailable: {exc}"
+
+    try:
+        inspector = app.control.inspect(timeout=GENERATION_WORKER_INSPECT_TIMEOUT_SECONDS)
+        pings = inspector.ping()
+    except Exception as exc:
+        return False, f"Book queue worker unavailable: {exc}"
+    if not pings:
+        return False, "Book queue worker unavailable"
+
+    try:
+        registered = inspector.registered() or {}
+    except Exception as exc:
+        return False, f"Book queue worker task registry unavailable: {exc}"
+    task_name = generate_book_pipeline.name
+    worker_has_task = any(
+        any(task == task_name or task.startswith(f"{task_name}[") for task in tasks)
+        for tasks in registered.values()
+    )
+    if not worker_has_task:
+        return False, "Book generation worker is running old code. Restart the worker."
+    return True, None
+
+
 @router.post(
     "/generate",
     response_model=BookGenerateResponse,
@@ -166,6 +198,13 @@ async def create_generated_book(
     user: CurrentUser,
     session: SessionDep,
 ) -> BookGenerateResponse:
+    worker_ready, worker_error = _generation_worker_ready()
+    if not worker_ready:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            worker_error or "Book queue worker unavailable",
+        )
+
     period_start = datetime.combine(payload.date_start, time.min, tzinfo=UTC)
     period_end = datetime.combine(payload.date_end + timedelta(days=1), time.min, tzinfo=UTC)
     config = payload.model_dump(mode="json")
@@ -180,7 +219,8 @@ async def create_generated_book(
         timeframe="custom",
         style=payload.style_preset,
         status="queued",
-        progress=0,
+        progress=1,
+        current_stage="queued",
         image_mode="abstract" if payload.cover_mode == "ai_mood" else "photo_inspired",
         include_voice_transcripts=payload.include_voice_transcripts,
         period_start=period_start,
