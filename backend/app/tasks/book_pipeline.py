@@ -467,6 +467,7 @@ def _generate_plan_with_llm(
     strategy: str,
     language: str,
 ) -> dict:
+    settings = get_settings()
     template = prompt_env.get_template("book_chapter_plan.j2")
     prompt = template.render(
         language=language,
@@ -477,16 +478,16 @@ def _generate_plan_with_llm(
         chapter_strategy=strategy,
         entries_json=json.dumps(_entry_summaries(entries), ensure_ascii=False),
     )
-    client = OpenAI(api_key=get_settings().openai_api_key)
+    client = _generation_openai_client(settings)
     response = client.chat.completions.create(
-        model=get_settings().openai_model_narrative,
+        model=settings.openai_model_narrative,
         messages=[
             {"role": "system", "content": "You are a careful memoir book editor."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
         max_tokens=3_000,
-        timeout=60,
+        timeout=settings.book_generation_openai_timeout_seconds,
     )
     content = response.choices[0].message.content if response.choices else None
     if not content:
@@ -515,6 +516,7 @@ def _generate_texts_with_llm(
     entries: list[Entry],
     chapters: list[BookChapter],
 ) -> dict:
+    settings = get_settings()
     template = prompt_env.get_template("book_generation_texts.j2")
     prompt = template.render(
         language=(book.config or {}).get("language", "en"),
@@ -526,16 +528,16 @@ def _generate_texts_with_llm(
         ],
         entries_json=json.dumps(_entry_summaries(entries), ensure_ascii=False),
     )
-    client = OpenAI(api_key=get_settings().openai_api_key)
+    client = _generation_openai_client(settings)
     response = client.chat.completions.create(
-        model=get_settings().openai_model_narrative,
+        model=settings.openai_model_narrative,
         messages=[
             {"role": "system", "content": "Write short connective text for a personal book."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
         max_tokens=1_500,
-        timeout=45,
+        timeout=settings.book_generation_openai_timeout_seconds,
     )
     content = response.choices[0].message.content if response.choices else None
     if not content:
@@ -550,6 +552,13 @@ def _generate_texts_with_llm(
             if isinstance(item, dict)
         },
     }
+
+
+def _generation_openai_client(settings) -> OpenAI:  # type: ignore[no-untyped-def]
+    return OpenAI(
+        api_key=settings.openai_api_key,
+        max_retries=settings.book_generation_openai_max_retries,
+    )
 
 
 def _fallback_texts(book: Book, plan: BookPlan, chapters: list[BookChapter]) -> dict:

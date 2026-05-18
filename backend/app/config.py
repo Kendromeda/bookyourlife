@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     openai_model_whisper: str = "whisper-1"
     openai_model_image: str = "gpt-image-2"
     openai_image_size: str = "1024x1024"
+    book_generation_openai_timeout_seconds: float = 20.0
+    book_generation_openai_max_retries: int = 0
 
     replicate_api_token: str = ""
     replicate_model_flux: str = "black-forest-labs/flux-1.1-pro"

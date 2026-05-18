@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from app.models.book import Book, BookPlan
 from app.models.entry import Entry
 from app.models.user import User
 from app.schemas.book import BookGenerateRequest
+from app.tasks import book_pipeline
 from app.tasks.book_pipeline import _fallback_enhancement, _fallback_plan
 
 QUOTE_SPOTLIGHT_TEMPLATE = 4
@@ -178,3 +180,60 @@ def test_fallback_enhancement_chooses_diary_style_for_text_only_entry() -> None:
 
     assert enhancement["layout_template"] == QUOTE_SPOTLIGHT_TEMPLATE
     assert enhancement["pull_quote"] == "This was a quiet day."
+
+
+def test_generation_llm_client_uses_timeout_and_no_retries(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    captured: dict[str, object] = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured["timeout"] = kwargs["timeout"]
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"book_title":"Fast Fallback Guard","theme_summary":"A season.",'
+                                '"chapters":[{"position":1,"title":"Chapter 1","entry_ids":[]}]}'
+                            )
+                        )
+                    )
+                ]
+            )
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str, max_retries: int) -> None:
+            captured["api_key"] = api_key
+            captured["max_retries"] = max_retries
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(book_pipeline, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(
+        book_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openai_api_key="sk-test",
+            openai_model_narrative="gpt-test",
+            book_generation_openai_timeout_seconds=7.5,
+            book_generation_openai_max_retries=0,
+        ),
+    )
+    user_id = uuid4()
+    book = Book(
+        id=uuid4(),
+        user_id=user_id,
+        timeframe="custom",
+        style="watercolor",
+        period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        period_end=datetime(2026, 1, 31, tzinfo=UTC),
+        status="queued",
+        config={"flow": "generation"},
+    )
+
+    book_pipeline._generate_plan_with_llm(book, [], "thematic", "en")
+
+    assert captured == {
+        "api_key": "sk-test",
+        "max_retries": 0,
+        "timeout": 7.5,
+    }
