@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: A5; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #2b2b2b;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #f7f1e3;
+    }
+    .page {
+      width: 148mm;
+      min-height: 210mm;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+      padding: 18mm 16mm;
+      background:
+        radial-gradient(circle at 20% 12%, rgba(255,255,255,0.45), transparent 25%),
+        linear-gradient(135deg, #f8f0df, #efe2c5);
+    }
+    .cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 24mm 18mm;
+      background:
+        linear-gradient(rgba(43,43,43,0.12), rgba(43,43,43,0.35)),
+        linear-gradient(145deg, #d8c39d, #f5eddc 48%, #b7c1a1);
+      color: #241c17;
+    }
+    h1, h2, h3 { font-weight: 500; margin: 0; }
+    h1 { font-size: 34pt; line-height: 1.05; }
+    h2 { font-size: 22pt; line-height: 1.15; margin-bottom: 8mm; }
+    h3 { font-size: 15pt; margin-bottom: 4mm; }
+    .subtitle { margin-top: 6mm; font-size: 13pt; font-style: italic; }
+    .small { color: #7b6d59; font-size: 9pt; letter-spacing: 0.08em; text-transform: uppercase; }
+    .body { font-size: 11pt; line-height: 1.62; }
+    .body p { margin: 0 0 4mm; }
+    .chapter-meta { margin-bottom: 10mm; color: #806f56; font-style: italic; }
+    .quote {
+      margin: 8mm 0;
+      padding: 5mm 0;
+      border-top: 1px solid #c6b58f;
+      border-bottom: 1px solid #c6b58f;
+      font-size: 15pt;
+      font-style: italic;
+      line-height: 1.35;
+      text-align: center;
+    }
+    .photo {
+      display: inline-block;
+      max-width: 82mm;
+      padding: 4mm 4mm 8mm;
+      margin: 4mm 0;
+      background: #fffdf8;
+      box-shadow: 0 2mm 5mm rgba(0,0,0,0.14);
+      transform: rotate(-1.5deg);
+    }
+    .photo img { display: block; width: 100%; max-height: 85mm; object-fit: cover; }
+    .caption {
+      margin-top: 2mm;
+      color: #6f604d;
+      font-size: 10pt;
+      font-style: italic;
+      text-align: center;
+    }
+    .entry-date {
+      color: #806f56;
+      font-size: 9pt;
+      letter-spacing: 0.06em;
+      margin-bottom: 3mm;
+      text-transform: uppercase;
+    }
+    .transcript {
+      margin-top: 5mm;
+      padding: 3mm 4mm;
+      border-left: 2px solid #b9a57e;
+      color: #6f604d;
+      font-size: 9pt;
+      font-family: Arial, sans-serif;
+    }
+    .footer {
+      position: absolute;
+      bottom: 7mm;
+      left: 16mm;
+      right: 16mm;
+      color: #9a8867;
+      font-size: 8pt;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <div class="small">Life Book</div>
+    <h1>{{ plan.generated_title }}</h1>
+    {% if plan.subtitle %}<div class="subtitle">{{ plan.subtitle }}</div>{% endif %}
+  </section>
+
+  <section class="page">
+    <div class="small">Preface</div>
+    <h2>{{ plan.generated_title }}</h2>
+    <div class="body">
+      {% for paragraph in (plan_payload.preface or '').split('\n') %}
+        {% if paragraph.strip() %}<p>{{ paragraph }}</p>{% endif %}
+      {% endfor %}
+    </div>
+    {% if dedication %}
+      <div class="quote">{{ dedication }}</div>
+    {% endif %}
+    <div class="footer">{{ generated_at }}</div>
+  </section>
+
+  <section class="page">
+    <div class="small">Contents</div>
+    <h2>Chapters</h2>
+    <div class="body">
+      {% for chapter in chapters %}
+        <p>{{ chapter.position }}. {{ chapter.title }}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% for chapter in chapters %}
+    <section class="page">
+      <div class="small">Chapter {{ chapter.position }}</div>
+      <h2>{{ chapter.title }}</h2>
+      {% if chapter.theme %}<div class="chapter-meta">{{ chapter.theme }}</div>{% endif %}
+      {% if chapter.intro_text %}
+        <div class="body"><p>{{ chapter.intro_text }}</p></div>
+      {% endif %}
+      <div class="footer">{{ plan.generated_title }}</div>
+    </section>
+
+    {% for link in links_by_chapter[chapter.id] %}
+      {% set entry = entry_by_id[link.entry_id] %}
+      {% set enhancement = enhancement_by_entry.get(link.entry_id) %}
+      <section class="page">
+        <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+        <h3>{{ entry.title or chapter.title }}</h3>
+        {% if enhancement and enhancement.pull_quote %}
+          <div class="quote">“{{ enhancement.pull_quote }}”</div>
+        {% endif %}
+        {% if entry.photos %}
+          <div class="photo">
+            <img src="{{ entry.photos[0].url }}" alt="">
+            {% if enhancement and enhancement.photo_captions %}
+              <div class="caption">{{ enhancement.photo_captions[0].caption }}</div>
+            {% endif %}
+          </div>
+        {% endif %}
+        <div class="body">
+          {% for paragraph in entry.paragraphs %}
+            <p>{{ paragraph }}</p>
+          {% endfor %}
+        </div>
+        {% if enhancement and enhancement.transcript %}
+          <div class="transcript">{{ enhancement.transcript }}</div>
+        {% endif %}
+        <div class="footer">{{ chapter.title }}</div>
+      </section>
+    {% endfor %}
+  {% endfor %}
+
+  <section class="page">
+    <div class="small">Epilog</div>
+    <h2>What Remains</h2>
+    <div class="body">
+      {% for paragraph in (plan_payload.epilog or '').split('\n') %}
+        {% if paragraph.strip() %}<p>{{ paragraph }}</p>{% endif %}
+      {% endfor %}
+    </div>
+  </section>
+</body>
+</html>

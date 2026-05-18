@@ -18,6 +18,8 @@ RUN pip install --upgrade pip && \
     pip install -e . && \
     pip install pytest pytest-asyncio pytest-cov ruff mypy
 
+RUN python -m playwright install --with-deps chromium
+
 COPY . .
 
 EXPOSE 8000

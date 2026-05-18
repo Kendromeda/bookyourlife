@@ -1,12 +1,19 @@
+from datetime import UTC, datetime, time, timedelta
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.deps import CurrentUser, SessionDep
-from app.models.book import Book
+from app.models.book import Book, BookPlan
 from app.schemas.book import (
+    BookGenerateRequest,
+    BookGenerateResponse,
+    BookGenerationDetail,
+    BookGenerationListResponse,
+    BookGenerationStatus,
     BookIllustrationUpdate,
     BookPreviewCreateResponse,
     BookPreviewRequest,
@@ -15,16 +22,54 @@ from app.schemas.book import (
 )
 from app.services.storage.r2 import get_r2_storage
 from app.tasks.book_gen import generate_book
+from app.tasks.book_pipeline import generate_book_pipeline
 
 router = APIRouter()
+
+GENERATION_FLOW = "generation"
+PREVIEW_FLOW = "preview"
+GENERATION_ESTIMATED_MINUTES = 8
+
+
+def _flow_value():  # type: ignore[no-untyped-def]
+    return Book.config["flow"].astext
+
+
+def _preview_filter():  # type: ignore[no-untyped-def]
+    return func.coalesce(_flow_value(), PREVIEW_FLOW) != GENERATION_FLOW
+
+
+def _generation_filter():  # type: ignore[no-untyped-def]
+    return _flow_value() == GENERATION_FLOW
 
 
 async def _load_book(book_id: UUID, user_id: UUID, session) -> Book:
     book = (
-        await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        await session.execute(
+            select(Book).where(
+                Book.id == book_id,
+                Book.user_id == user_id,
+                _preview_filter(),
+            )
+        )
     ).scalar_one_or_none()
     if book is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Book preview not found")
+    return book
+
+
+async def _load_generation_book(book_id: UUID, user_id: UUID, session) -> Book:
+    book = (
+        await session.execute(
+            select(Book).where(
+                Book.id == book_id,
+                Book.user_id == user_id,
+                _generation_filter(),
+            )
+        )
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Book not found")
     return book
 
 
@@ -79,6 +124,92 @@ def _serialize(book: Book) -> BookPreviewResponse:
     )
 
 
+def _serialize_generation(book: Book, plan: BookPlan | None) -> BookGenerationDetail:
+    storage = None
+    pdf_url = book.pdf_url
+    cover_url = book.cover_image_url
+    if book.pdf_r2_key:
+        storage = get_r2_storage()
+        pdf_url = storage.public_url(book.pdf_r2_key)
+    if book.cover_r2_key:
+        if storage is None:
+            storage = get_r2_storage()
+        cover_url = storage.public_url(book.cover_r2_key)
+    return BookGenerationDetail(
+        book_id=book.id,
+        status=book.status,  # type: ignore[arg-type]
+        progress=book.progress,
+        current_stage=book.current_stage,
+        generated_title=plan.generated_title if plan else book.title,
+        subtitle=plan.subtitle if plan else None,
+        theme_summary=plan.theme_summary if plan else None,
+        pdf_url=pdf_url,
+        cover_url=cover_url,
+        error_message=book.error_message,
+    )
+
+
+async def _generation_detail(book: Book, session) -> BookGenerationDetail:  # type: ignore[no-untyped-def]
+    plan = (
+        await session.execute(select(BookPlan).where(BookPlan.book_id == book.id))
+    ).scalar_one_or_none()
+    return _serialize_generation(book, plan)
+
+
+@router.post(
+    "/generate",
+    response_model=BookGenerateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_generated_book(
+    payload: BookGenerateRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> BookGenerateResponse:
+    period_start = datetime.combine(payload.date_start, time.min, tzinfo=UTC)
+    period_end = datetime.combine(payload.date_end + timedelta(days=1), time.min, tzinfo=UTC)
+    config = payload.model_dump(mode="json")
+    config.update(
+        {
+            "flow": GENERATION_FLOW,
+            "language": user.preferred_language or "en",
+        }
+    )
+    book = Book(
+        user_id=user.id,
+        timeframe="custom",
+        style=payload.style_preset,
+        status="queued",
+        progress=0,
+        image_mode="abstract" if payload.cover_mode == "ai_mood" else "photo_inspired",
+        include_voice_transcripts=payload.include_voice_transcripts,
+        period_start=period_start,
+        period_end=period_end,
+        config=config,
+        title=payload.custom_title,
+    )
+    session.add(book)
+    await session.commit()
+    await session.refresh(book)
+
+    try:
+        generate_book_pipeline.delay(str(book.id))
+    except Exception as exc:
+        book.status = "failed"
+        book.error_message = f"Book queue unavailable: {exc}"
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Book queue unavailable",
+        ) from exc
+
+    return BookGenerateResponse(
+        book_id=book.id,
+        status=book.status,  # type: ignore[arg-type]
+        estimated_minutes=GENERATION_ESTIMATED_MINUTES,
+    )
+
+
 @router.post(
     "/previews",
     response_model=BookPreviewCreateResponse,
@@ -98,6 +229,7 @@ async def create_book_preview(
         include_voice_transcripts=payload.include_voice_transcripts,
         period_start=payload.period_start,
         period_end=payload.period_end,
+        config={"flow": PREVIEW_FLOW},
     )
     session.add(book)
     await session.commit()
@@ -129,8 +261,8 @@ async def get_latest_book_preview(
     """
     book = (
         await session.execute(
-            select(Book)
-            .where(Book.user_id == user.id)
+        select(Book)
+            .where(Book.user_id == user.id, _preview_filter())
             .order_by(Book.created_at.desc())
             .limit(1),
         )
@@ -198,3 +330,63 @@ async def patch_book_tweaks(
     await session.commit()
     await session.refresh(book)
     return _serialize(book)
+
+
+@router.get("", response_model=BookGenerationListResponse)
+async def list_generated_books(
+    user: CurrentUser,
+    session: SessionDep,
+    status_filter: Annotated[BookGenerationStatus | None, Query(alias="status")] = None,
+) -> BookGenerationListResponse:
+    filters = [Book.user_id == user.id, _generation_filter()]
+    if status_filter is not None:
+        filters.append(Book.status == status_filter)
+    books = list(
+        (
+            await session.execute(
+                select(Book).where(*filters).order_by(Book.created_at.desc()).limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not books:
+        return BookGenerationListResponse(items=[])
+
+    plan_rows = (
+        await session.execute(
+            select(BookPlan).where(BookPlan.book_id.in_([book.id for book in books]))
+        )
+    ).scalars()
+    plans = {plan.book_id: plan for plan in plan_rows}
+    return BookGenerationListResponse(
+        items=[_serialize_generation(book, plans.get(book.id)) for book in books]
+    )
+
+
+@router.get("/{book_id}", response_model=BookGenerationDetail)
+async def get_generated_book(
+    book_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+) -> BookGenerationDetail:
+    book = await _load_generation_book(book_id, user.id, session)
+    return await _generation_detail(book, session)
+
+
+@router.post("/{book_id}/cancel", response_model=BookGenerationDetail)
+async def cancel_generated_book(
+    book_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+) -> BookGenerationDetail:
+    book = await _load_generation_book(book_id, user.id, session)
+    if book.status not in {"queued", "processing"}:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Book cannot be cancelled")
+    book.status = "cancelled"
+    book.current_stage = "cancelled"
+    book.error_message = "Cancelled by user"
+    book.progress = min(book.progress, 99)
+    await session.commit()
+    await session.refresh(book)
+    return await _generation_detail(book, session)

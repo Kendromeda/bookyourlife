@@ -1,0 +1,35 @@
+LANGUAGE: {{ language }}
+PERIOD: {{ start_date }} to {{ end_date }} ({{ period_days }} days)
+ENTRY_COUNT: {{ entry_count }}
+CHAPTER_STRATEGY: {{ chapter_strategy }}
+
+You are organizing a personal journal into a memoir-style printable book.
+Do not rewrite journal entries. Return only valid JSON with this shape:
+{
+  "book_title": "3-7 words",
+  "subtitle": "5-12 words",
+  "theme_summary": "one sentence",
+  "dominant_mood": "reflective",
+  "chapters": [
+    {
+      "position": 1,
+      "part_label": null,
+      "title": "2-5 words",
+      "theme": "one sentence",
+      "entry_ids": ["entry uuid"],
+      "date_range_start": "YYYY-MM-DD",
+      "date_range_end": "YYYY-MM-DD",
+      "chapter_intro_hint": "one sentence"
+    }
+  ],
+  "skipped_entry_ids": []
+}
+
+Rules:
+- Follow CHAPTER_STRATEGY exactly.
+- Every entry must appear in exactly one chapter unless it has fewer than 5 words and no photo.
+- Output all strings in LANGUAGE.
+- Avoid generic title words like Journey, Chronicles, Memoirs, and Story.
+
+ENTRIES:
+{{ entries_json }}

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -14,6 +14,10 @@ BookTone = Literal[
 ]
 BookImageMode = Literal["abstract", "photo_inspired", "none"]
 BookStatus = Literal["queued", "processing", "done", "failed"]
+BookGenerationMode = Literal["illustrated", "photo_only", "mixed"]
+BookStylePreset = Literal["watercolor", "pencil", "vintage", "anime"]
+BookCoverMode = Literal["ai_mood", "best_photo"]
+BookGenerationStatus = Literal["queued", "processing", "completed", "failed", "cancelled"]
 
 
 class BookPreviewRequest(BaseModel):
@@ -92,3 +96,44 @@ class BookTweaksUpdate(BaseModel):
     ribbon: str | None = Field(default=None, max_length=32)
     surface: str | None = Field(default=None, max_length=32)
     illustrations_enabled: bool | None = None
+
+
+class BookGenerateRequest(BaseModel):
+    date_start: date
+    date_end: date
+    mode: BookGenerationMode = "illustrated"
+    style_preset: BookStylePreset = "watercolor"
+    cover_mode: BookCoverMode = "ai_mood"
+    include_voice_transcripts: bool = True
+    illustrated_required: bool = False
+    custom_title: str | None = Field(default=None, max_length=120)
+    dedication: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "BookGenerateRequest":
+        if self.date_end < self.date_start:
+            raise ValueError("date_end must be on or after date_start")
+        return self
+
+
+class BookGenerateResponse(BaseModel):
+    book_id: UUID
+    status: BookGenerationStatus
+    estimated_minutes: int
+
+
+class BookGenerationDetail(BaseModel):
+    book_id: UUID
+    status: BookGenerationStatus
+    progress: int
+    current_stage: str | None = None
+    generated_title: str | None = None
+    subtitle: str | None = None
+    theme_summary: str | None = None
+    pdf_url: str | None = None
+    cover_url: str | None = None
+    error_message: str | None = None
+
+
+class BookGenerationListResponse(BaseModel):
+    items: list[BookGenerationDetail] = Field(default_factory=list)

@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.question_gen",
         "app.tasks.index_entry",
         "app.tasks.book_gen",
+        "app.tasks.book_pipeline",
         "app.tasks.image_gen",
         "app.tasks.notification",
     ],
@@ -38,4 +39,3 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=30),  # tiap 30 menit lewat
     },
 }
-import app.tasks.image_gen  # noqa: F401

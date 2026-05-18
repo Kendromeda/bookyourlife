@@ -1,16 +1,11 @@
-import os
+from fastapi import status
+from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
-os.environ.setdefault("SYNC_DATABASE_URL", "postgresql://test:test@localhost/test")
-os.environ.setdefault("REDIS_URL", "redis://localhost/0")
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.main import create_app  # noqa: E402
+from app.main import create_app
 
 
 def test_healthz() -> None:
     client = TestClient(create_app())
     response = client.get("/healthz")
-    assert response.status_code == 200
+    assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "ok"

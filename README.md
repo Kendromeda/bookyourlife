@@ -32,6 +32,13 @@ docker compose up                # api di :8000, worker, beat
 curl localhost:8000/healthz
 ```
 
+Book PDF generation uses Playwright Chromium in the Celery worker. For local
+non-Docker runs, install the browser once from `backend/`:
+
+```bash
+python -m playwright install chromium
+```
+
 ## Dokumen
 
 - Plan eksekusi master: `~/.claude/plans/hasilkan-paket-dokumen-perencanaan-sunny-meerkat.md`

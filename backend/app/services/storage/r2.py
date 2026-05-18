@@ -104,6 +104,7 @@ _EXTENSION_BY_TYPE: dict[str, str] = {
     "audio/3gpp": "3gp",
     "audio/webm": "webm",
     "audio/ogg": "ogg",
+    "application/pdf": "pdf",
 }
 
 

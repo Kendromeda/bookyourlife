@@ -1,0 +1,22 @@
+LANGUAGE: {{ language }}
+TITLE: {{ title }}
+THEME: {{ theme_summary }}
+
+Write short editorial connective text for a printable personal journal book.
+Do not rewrite or summarize individual journal entries as if they were authored by you.
+Return only valid JSON:
+{
+  "preface": "1-3 short paragraphs",
+  "chapter_intros": [
+    {"position": 1, "intro": "2-4 sentences"}
+  ],
+  "epilog": "1-2 short paragraphs"
+}
+
+Output all strings in LANGUAGE.
+
+CHAPTERS:
+{{ chapters }}
+
+ENTRY SUMMARIES:
+{{ entries_json }}
