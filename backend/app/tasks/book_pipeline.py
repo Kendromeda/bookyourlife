@@ -646,6 +646,8 @@ def _normalize_plan_payload(payload: dict, entries: list[Entry], strategy: str) 
             chapters.append(item)
     if not chapters:
         raise _BookGenerationError("Chapter plan did not include usable chapters")
+    for position, chapter in enumerate(chapters, start=1):
+        chapter["position"] = position
     return {
         "book_title": str(payload.get("book_title") or "Your Life Book"),
         "subtitle": str(payload.get("subtitle") or ""),

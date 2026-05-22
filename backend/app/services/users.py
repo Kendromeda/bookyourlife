@@ -63,11 +63,12 @@ async def get_user_stats(session: AsyncSession, *, user: User) -> dict[str, int]
     day_set: set[date] = set()
 
     for written_at, body_len in items:
-        if written_at.tzinfo is None:
-            written_at = written_at.replace(tzinfo=UTC)
-        local_day = written_at.astimezone(tz).date()
+        entry_written_at = written_at
+        if entry_written_at.tzinfo is None:
+            entry_written_at = entry_written_at.replace(tzinfo=UTC)
+        local_day = entry_written_at.astimezone(tz).date()
         day_set.add(local_day)
-        if written_at.astimezone(UTC) >= cutoff_30:
+        if entry_written_at.astimezone(UTC) >= cutoff_30:
             entries_last_30_days += 1
         # body_len is char length, not words; approximate words by /5 (avg English/Indonesian)
         # but a more honest signal: split on whitespace would require fetching body —

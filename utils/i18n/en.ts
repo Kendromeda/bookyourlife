@@ -133,38 +133,126 @@ export const en = {
   'auth.signUp.verify': 'Verify',
   'auth.signUp.toggle': 'Already have an account? Sign in',
 
-  // Onboarding
-  'onboarding.step': 'Step {current} of {total}',
-  'onboarding.profile.title': "Let's set you up",
-  'onboarding.profile.subtitle':
-    'Your face photo helps us draw illustrations that look like you in your book chapters.',
-  'onboarding.profile.addPhoto': '+ Add face photo',
+  // Onboarding — shared / legacy keys still used by Profile screen
   'onboarding.profile.namePlaceholder': 'Your name',
-  'onboarding.gender.title': 'How do you identify?',
-  'onboarding.gender.subtitle':
-    'Helps us tailor reflections. You can change this later.',
   'onboarding.gender.male': 'Male',
   'onboarding.gender.female': 'Female',
   'onboarding.gender.non_binary': 'Non-binary',
   'onboarding.gender.prefer_not_to_say': 'Prefer not to say',
-  'onboarding.birthday.title': 'When were you born?',
-  'onboarding.birthday.subtitle':
-    'We use your age to make reflections feel more like you.',
   'onboarding.birthday.year': 'Year',
   'onboarding.birthday.month': 'Month',
   'onboarding.birthday.day': 'Day',
-  'onboarding.goal.title': 'What brings you here?',
-  'onboarding.goal.subtitle': 'Pick what fits best.',
   'onboarding.goal.self_reflection': 'Self-reflection',
   'onboarding.goal.mental_health': 'Mental health',
   'onboarding.goal.memory': 'Memory keeping',
   'onboarding.goal.creativity': 'Creativity',
   'onboarding.goal.other': 'Other',
-  'onboarding.language.title': 'Choose your language',
-  'onboarding.language.subtitle':
-    'You can change this anytime in More → Language.',
-  'onboarding.error.required': 'Please pick an option to continue.',
   'onboarding.error.save': 'Failed to save profile',
+
+  // Onboarding · 01 Welcome
+  'onboarding.welcome.eyebrow': 'Book My Life · Est. {year}',
+  'onboarding.welcome.headingA': 'Your life,',
+  'onboarding.welcome.headingB': 'as a book.',
+  'onboarding.welcome.body':
+    'Write a little each day. We bind it — illustrated, printed, hardbound — at the end of every year.',
+  'onboarding.welcome.begin': 'Begin your volume',
+  'onboarding.welcome.haveAccount': 'I already have an account',
+
+  // Onboarding · 02 Name
+  'onboarding.name.eyebrow': 'Step one · Attribution',
+  'onboarding.name.title': 'What name should appear on the spine?',
+  'onboarding.name.body':
+    "You can change this later, or use a pen name. We won't share it.",
+  'onboarding.name.label': 'Your name',
+  'onboarding.name.previewEyebrow': 'How it will appear',
+  'onboarding.name.previewVolume': 'Volume One · {year}',
+  'onboarding.name.previewTitle': 'The year I learned to listen',
+  'onboarding.name.previewBy': 'by {name}',
+  'onboarding.name.previewBlank': 'your name',
+  'onboarding.name.previewCaption':
+    "The book title is drafted from your entries — yours to rename when it's ready.",
+
+  // Onboarding · 03 Intent (multi-select; local-only)
+  'onboarding.intent.eyebrow': 'Step two · Intention',
+  'onboarding.intent.title': 'What are you hoping to write toward?',
+  'onboarding.intent.body':
+    "Pick all that ring true. We'll tune the prompts you see.",
+  'onboarding.intent.option.daily': 'Capture daily life',
+  'onboarding.intent.option.trip': 'Remember a trip or year',
+  'onboarding.intent.option.feelings': 'Process feelings',
+  'onboarding.intent.option.chapter': 'Mark a chapter — birth, loss, move',
+  'onboarding.intent.option.writer': 'Become a more honest writer',
+  'onboarding.intent.option.kids': 'Leave something for my kids',
+  'onboarding.intent.selected': '{count} selected',
+
+  // Onboarding · 04 Prompt packs (multi-select; local-only)
+  'onboarding.packs.eyebrow': 'Step three · Prompts',
+  'onboarding.packs.title': 'Which kinds of questions do you want?',
+  'onboarding.packs.body':
+    'A new prompt arrives each morning, drawn from the packs you keep on.',
+  'onboarding.packs.featuredEyebrow': 'A taste · Reflection',
+  'onboarding.packs.featuredQuestion':
+    "What is something you've outgrown without noticing?",
+  'onboarding.packs.subtle': 'You can change packs anytime in Prompts',
+  'onboarding.packs.meta': '{count} prompts · {desc}',
+  'onboarding.packs.pack.reflection.desc': 'Pause and look inward',
+  'onboarding.packs.pack.gratitude.desc': 'Notice the small good things',
+  'onboarding.packs.pack.aboutMe.desc': 'A portrait of who you are',
+  'onboarding.packs.pack.mindfulness.desc': 'Drop into the present',
+  'onboarding.packs.pack.creativity.desc': 'Stretch your imagination',
+
+  // Onboarding · 05 Rhythm
+  'onboarding.rhythm.eyebrow': 'Step four · Rhythm',
+  'onboarding.rhythm.title': 'When do you write best?',
+  'onboarding.rhythm.body':
+    "We'll send one gentle reminder. Just one — never more.",
+  'onboarding.rhythm.morning': 'Morning',
+  'onboarding.rhythm.midday': 'Midday',
+  'onboarding.rhythm.evening': 'Evening',
+  'onboarding.rhythm.remindAt': 'Remind me at',
+  'onboarding.rhythm.everyMorning': 'EVERY MORNING',
+  'onboarding.rhythm.everyMidday': 'EVERY MIDDAY',
+  'onboarding.rhythm.everyEvening': 'EVERY EVENING',
+  'onboarding.rhythm.onTheseDays': 'On these days',
+  'onboarding.rhythm.notifOn': 'ON',
+
+  // Onboarding · 06 Likeness
+  'onboarding.likeness.eyebrow': 'Step five · Likeness',
+  'onboarding.likeness.title':
+    "Lend us your likeness, and we'll illustrate your chapters.",
+  'onboarding.likeness.body':
+    'Three clear selfies are enough. Photos stay private, used only to draw you.',
+  'onboarding.likeness.slotCounter': '{current}/{total}',
+  'onboarding.likeness.guide.title': 'What works best',
+  'onboarding.likeness.guide.front': 'Front-facing, well lit, no sunglasses',
+  'onboarding.likeness.guide.range':
+    'A range of expressions tells a fuller story',
+  'onboarding.likeness.guide.refresh':
+    'You can refresh these any time in Settings',
+  'onboarding.likeness.encrypted': 'End-to-end encrypted · never sold',
+  'onboarding.likeness.cta.addThree': 'Add three photos',
+  'onboarding.likeness.cta.addMore': 'Add {remaining} more',
+  'onboarding.likeness.cta.continue': 'Continue',
+  'onboarding.likeness.skip': "Skip — I'll add later",
+
+  // Onboarding · 07 Ready
+  'onboarding.ready.eyebrowNamed': "You're ready, {name}",
+  'onboarding.ready.eyebrow': "You're ready",
+  'onboarding.ready.titleA': 'Page one',
+  'onboarding.ready.titleB': 'is waiting.',
+  'onboarding.ready.badge.packs': '{count} packs',
+  'onboarding.ready.badge.packs.one': '1 pack',
+  'onboarding.ready.badge.packsSubOne': '{first}',
+  'onboarding.ready.badge.packsSubMany': '{first} +{rest}',
+  'onboarding.ready.badge.reminder': 'Reminder',
+  'onboarding.ready.badge.photo': '{count} photo',
+  'onboarding.ready.badge.photos': '{count} photos',
+  'onboarding.ready.badge.photosSub': 'For likeness',
+  'onboarding.ready.firstPrompt': 'Your first prompt',
+  'onboarding.ready.firstPromptText':
+    "What is true about today that wasn't true a year ago?",
+  'onboarding.ready.beginWriting': 'Begin writing',
+  'onboarding.ready.takeMeToday': 'Take me to today instead',
 
   // Profile screen
   'profile.title': 'Profile',

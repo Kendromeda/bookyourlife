@@ -12,10 +12,14 @@ class Question(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "questions"
 
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    source: Mapped[str] = mapped_column(String(32), nullable=False)  # follow_up | fresh | on_this_date
+    # follow_up | fresh | on_this_date
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
     context_entry_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(PG_UUID(as_uuid=True)), nullable=False, default=list, server_default="{}"
     )

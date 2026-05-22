@@ -134,38 +134,128 @@ export const id: Record<TranslationKey, string> = {
   'auth.signUp.verify': 'Verifikasi',
   'auth.signUp.toggle': 'Sudah punya akun? Masuk',
 
-  // Onboarding
-  'onboarding.step': 'Langkah {current} dari {total}',
-  'onboarding.profile.title': 'Yuk siapkan akunmu',
-  'onboarding.profile.subtitle':
-    'Foto wajahmu membantu kami menggambar ilustrasi yang mirip denganmu di bab buku.',
-  'onboarding.profile.addPhoto': '+ Tambah foto wajah',
+  // Onboarding — shared / legacy keys still used by Profile screen
   'onboarding.profile.namePlaceholder': 'Namamu',
-  'onboarding.gender.title': 'Bagaimana kamu mengidentifikasi diri?',
-  'onboarding.gender.subtitle':
-    'Membantu kami menyesuaikan refleksi. Bisa diubah nanti.',
   'onboarding.gender.male': 'Laki-laki',
   'onboarding.gender.female': 'Perempuan',
   'onboarding.gender.non_binary': 'Non-biner',
   'onboarding.gender.prefer_not_to_say': 'Tidak ingin menjawab',
-  'onboarding.birthday.title': 'Kapan kamu lahir?',
-  'onboarding.birthday.subtitle':
-    'Usia membantu kami menyesuaikan nada refleksi.',
   'onboarding.birthday.year': 'Tahun',
   'onboarding.birthday.month': 'Bulan',
   'onboarding.birthday.day': 'Tanggal',
-  'onboarding.goal.title': 'Apa yang membawamu ke sini?',
-  'onboarding.goal.subtitle': 'Pilih yang paling sesuai.',
   'onboarding.goal.self_reflection': 'Refleksi diri',
   'onboarding.goal.mental_health': 'Kesehatan mental',
   'onboarding.goal.memory': 'Menyimpan kenangan',
   'onboarding.goal.creativity': 'Kreativitas',
   'onboarding.goal.other': 'Lainnya',
-  'onboarding.language.title': 'Pilih bahasa',
-  'onboarding.language.subtitle':
-    'Bisa diubah kapan saja di Lainnya → Bahasa.',
-  'onboarding.error.required': 'Pilih salah satu opsi untuk melanjutkan.',
   'onboarding.error.save': 'Gagal menyimpan profil',
+
+  // Onboarding · 01 Welcome
+  'onboarding.welcome.eyebrow': 'Book My Life · Est. {year}',
+  'onboarding.welcome.headingA': 'Hidupmu,',
+  'onboarding.welcome.headingB': 'sebagai buku.',
+  'onboarding.welcome.body':
+    'Tulis sedikit setiap hari. Kami jilid menjadi buku — diilustrasi, dicetak, sampul keras — di akhir setiap tahun.',
+  'onboarding.welcome.begin': 'Mulai volumemu',
+  'onboarding.welcome.haveAccount': 'Saya sudah punya akun',
+
+  // Onboarding · 02 Name
+  'onboarding.name.eyebrow': 'Langkah satu · Atribusi',
+  'onboarding.name.title': 'Nama apa yang akan tertulis di sampul?',
+  'onboarding.name.body':
+    'Bisa diubah nanti, atau pakai nama pena. Kami tidak akan membagikannya.',
+  'onboarding.name.label': 'Namamu',
+  'onboarding.name.previewEyebrow': 'Akan tampak seperti ini',
+  'onboarding.name.previewVolume': 'Volume Satu · {year}',
+  'onboarding.name.previewTitle': 'Tahun aku belajar mendengarkan',
+  'onboarding.name.previewBy': 'oleh {name}',
+  'onboarding.name.previewBlank': 'namamu',
+  'onboarding.name.previewCaption':
+    'Judul buku disusun dari entrimu — bisa kamu ganti nanti.',
+
+  // Onboarding · 03 Intent (multi-select; local-only)
+  'onboarding.intent.eyebrow': 'Langkah dua · Niat',
+  'onboarding.intent.title': 'Apa yang ingin kamu tulis?',
+  'onboarding.intent.body':
+    'Pilih semua yang terasa pas. Kami akan menyesuaikan pertanyaan yang muncul.',
+  'onboarding.intent.option.daily': 'Mencatat keseharian',
+  'onboarding.intent.option.trip': 'Mengenang perjalanan atau satu tahun',
+  'onboarding.intent.option.feelings': 'Mengolah perasaan',
+  'onboarding.intent.option.chapter':
+    'Menandai babak — kelahiran, kehilangan, pindah',
+  'onboarding.intent.option.writer': 'Menjadi penulis yang lebih jujur',
+  'onboarding.intent.option.kids': 'Meninggalkan sesuatu untuk anak-anakku',
+  'onboarding.intent.selected': '{count} terpilih',
+
+  // Onboarding · 04 Prompt packs (multi-select; local-only)
+  'onboarding.packs.eyebrow': 'Langkah tiga · Pertanyaan',
+  'onboarding.packs.title': 'Jenis pertanyaan apa yang kamu inginkan?',
+  'onboarding.packs.body':
+    'Pertanyaan baru datang setiap pagi, diambil dari paket yang kamu aktifkan.',
+  'onboarding.packs.featuredEyebrow': 'Cicipi · Refleksi',
+  'onboarding.packs.featuredQuestion':
+    'Apa yang kamu tinggalkan tanpa kamu sadari?',
+  'onboarding.packs.subtle':
+    'Paket bisa diubah kapan saja di tab Pertanyaan',
+  'onboarding.packs.meta': '{count} pertanyaan · {desc}',
+  'onboarding.packs.pack.reflection.desc': 'Berhenti dan lihat ke dalam diri',
+  'onboarding.packs.pack.gratitude.desc': 'Perhatikan hal-hal kecil yang baik',
+  'onboarding.packs.pack.aboutMe.desc': 'Potret tentang siapa kamu',
+  'onboarding.packs.pack.mindfulness.desc': 'Masuk ke momen ini',
+  'onboarding.packs.pack.creativity.desc': 'Regangkan imajinasimu',
+
+  // Onboarding · 05 Rhythm
+  'onboarding.rhythm.eyebrow': 'Langkah empat · Ritme',
+  'onboarding.rhythm.title': 'Kapan kamu menulis paling lancar?',
+  'onboarding.rhythm.body':
+    'Kami akan kirim satu pengingat lembut. Hanya satu — tidak lebih.',
+  'onboarding.rhythm.morning': 'Pagi',
+  'onboarding.rhythm.midday': 'Siang',
+  'onboarding.rhythm.evening': 'Malam',
+  'onboarding.rhythm.remindAt': 'Ingatkan jam',
+  'onboarding.rhythm.everyMorning': 'SETIAP PAGI',
+  'onboarding.rhythm.everyMidday': 'SETIAP SIANG',
+  'onboarding.rhythm.everyEvening': 'SETIAP MALAM',
+  'onboarding.rhythm.onTheseDays': 'Di hari-hari ini',
+  'onboarding.rhythm.notifOn': 'AKTIF',
+
+  // Onboarding · 06 Likeness
+  'onboarding.likeness.eyebrow': 'Langkah lima · Wajah',
+  'onboarding.likeness.title':
+    'Pinjamkan wajahmu, kami akan ilustrasikan bab-babmu.',
+  'onboarding.likeness.body':
+    'Tiga selfie yang jelas sudah cukup. Foto tetap privat, hanya untuk menggambarmu.',
+  'onboarding.likeness.slotCounter': '{current}/{total}',
+  'onboarding.likeness.guide.title': 'Tips foto terbaik',
+  'onboarding.likeness.guide.front':
+    'Wajah lurus, pencahayaan baik, tanpa kacamata hitam',
+  'onboarding.likeness.guide.range': 'Ragam ekspresi membuat hasil lebih kaya',
+  'onboarding.likeness.guide.refresh':
+    'Bisa diperbarui kapan saja di Pengaturan',
+  'onboarding.likeness.encrypted': 'Terenkripsi end-to-end · tidak dijual',
+  'onboarding.likeness.cta.addThree': 'Tambah tiga foto',
+  'onboarding.likeness.cta.addMore': 'Tambah {remaining} lagi',
+  'onboarding.likeness.cta.continue': 'Lanjut',
+  'onboarding.likeness.skip': 'Lewati — saya tambahkan nanti',
+
+  // Onboarding · 07 Ready
+  'onboarding.ready.eyebrowNamed': 'Kamu siap, {name}',
+  'onboarding.ready.eyebrow': 'Kamu siap',
+  'onboarding.ready.titleA': 'Halaman satu',
+  'onboarding.ready.titleB': 'menanti.',
+  'onboarding.ready.badge.packs': '{count} paket',
+  'onboarding.ready.badge.packs.one': '1 paket',
+  'onboarding.ready.badge.packsSubOne': '{first}',
+  'onboarding.ready.badge.packsSubMany': '{first} +{rest}',
+  'onboarding.ready.badge.reminder': 'Pengingat',
+  'onboarding.ready.badge.photo': '{count} foto',
+  'onboarding.ready.badge.photos': '{count} foto',
+  'onboarding.ready.badge.photosSub': 'Untuk wajah',
+  'onboarding.ready.firstPrompt': 'Pertanyaan pertamamu',
+  'onboarding.ready.firstPromptText':
+    'Apa yang benar hari ini yang setahun lalu belum benar?',
+  'onboarding.ready.beginWriting': 'Mulai menulis',
+  'onboarding.ready.takeMeToday': 'Bawa saya ke hari ini',
 
   // Profile screen
   'profile.title': 'Profil',

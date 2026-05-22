@@ -1,14 +1,15 @@
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import Enum as SQLEnum, ForeignKey, String, Text
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import Base, TimestampMixin, UUIDMixin
 
 
-class AiImageJobStatus(str, Enum):
+class AiImageJobStatus(StrEnum):
     pending = "pending"
     processing = "processing"
     done = "done"

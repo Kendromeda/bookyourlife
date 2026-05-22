@@ -18,7 +18,11 @@ from app.models.entry import Entry
 from app.models.user import User
 from app.schemas.book import BookGenerateRequest
 from app.tasks import book_pipeline
-from app.tasks.book_pipeline import _fallback_enhancement, _fallback_plan
+from app.tasks.book_pipeline import (
+    _fallback_enhancement,
+    _fallback_plan,
+    _normalize_plan_payload,
+)
 
 QUOTE_SPOTLIGHT_TEMPLATE = 4
 
@@ -193,6 +197,48 @@ def test_fallback_plan_assigns_all_entries() -> None:
         for entry_id in chapter["entry_ids"]
     }
 
+    assert planned_ids == {str(entry.id) for entry in entries}
+
+
+def test_normalized_llm_plan_reassigns_sequential_chapter_positions() -> None:
+    user_id = uuid4()
+    entries = [
+        Entry(
+            id=uuid4(),
+            user_id=user_id,
+            body=f"Entry number {index} with enough words to be included.",
+            written_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=index),
+            emotion_tags=[],
+            photos=[],
+            audios=[],
+        )
+        for index in range(3)
+    ]
+    payload = {
+        "book_title": "Odd Numbered Days",
+        "theme_summary": "A short season.",
+        "chapters": [
+            {
+                "position": 7,
+                "title": "First",
+                "entry_ids": [str(entries[0].id)],
+            },
+            {
+                "position": 7,
+                "title": "Second",
+                "entry_ids": [str(entries[1].id)],
+            },
+        ],
+    }
+
+    plan = _normalize_plan_payload(payload, entries, "thematic")
+
+    assert [chapter["position"] for chapter in plan["chapters"]] == [1, 2, 3]
+    planned_ids = {
+        entry_id
+        for chapter in plan["chapters"]
+        for entry_id in chapter["entry_ids"]
+    }
     assert planned_ids == {str(entry.id) for entry in entries}
 
 

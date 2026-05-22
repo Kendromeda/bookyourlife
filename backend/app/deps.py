@@ -1,7 +1,7 @@
-import httpx
 from functools import lru_cache
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, Header, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession

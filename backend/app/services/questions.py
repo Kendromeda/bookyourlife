@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import desc, select
@@ -12,7 +12,7 @@ from app.models.question import Question
 async def latest_question_for_today(
     session: AsyncSession, *, user_id: UUID, now: datetime | None = None
 ) -> Question | None:
-    now = now or datetime.now(tz=timezone.utc)
+    now = now or datetime.now(tz=UTC)
     since = now - timedelta(hours=24)
     stmt = (
         select(Question)
@@ -26,7 +26,7 @@ async def latest_question_for_today(
 async def recent_question_texts(
     session: AsyncSession, *, user_id: UUID, days: int = 30
 ) -> list[str]:
-    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    since = datetime.now(tz=UTC) - timedelta(days=days)
     stmt = (
         select(Question.text)
         .where(Question.user_id == user_id, Question.asked_at >= since)
@@ -61,7 +61,7 @@ async def persist_question(
         text=text,
         source=source,
         context_entry_ids=context_entry_ids,
-        asked_at=asked_at or datetime.now(tz=timezone.utc),
+        asked_at=asked_at or datetime.now(tz=UTC),
     )
     session.add(question)
     await session.commit()
