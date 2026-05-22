@@ -2,11 +2,12 @@ name: expo-ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths-ignore:
       - "backend/**"
       - "docs/**"
   pull_request:
+    branches: [master]
     paths-ignore:
       - "backend/**"
       - "docs/**"

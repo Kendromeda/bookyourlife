@@ -47,3 +47,8 @@ app-example
 # Claude Design handoff bundles (local scratch)
 .tmp-design/
 BookPreview/
+
+# local code-analysis/debug output
+.graphify_*.json
+graphify-out/
+book_generation_plan.md
