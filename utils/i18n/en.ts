@@ -109,6 +109,11 @@ export const en = {
   'editor.voiceNote': 'Voice note',
   'editor.video': 'Video',
   'editor.uploading': 'uploading…',
+  'editor.transcribing': 'transcribing…',
+  'editor.transcribeToJournal': 'Transcribe to journal',
+  'editor.transcribePremium': 'Transcribe · Premium',
+  'editor.error.transcriptionFailed': 'Audio transcription failed',
+  'editor.error.transcriptionPremium': 'Audio transcription is a Premium feature.',
 
   // Modal header
   'modal.discardTitle': 'Discard unsaved changes?',
@@ -300,7 +305,7 @@ export const en = {
   // Privacy screen
   'privacy.title': 'Privacy',
   'privacy.body':
-    'Your entries are stored privately and only used to power your daily reflections. We never share your journal content with third parties. Voice notes are not transcribed by default; transcription is only used when you explicitly enable it for a book preview.',
+    'Your entries are stored privately and only used to power your daily reflections. We never share your journal content with third parties. Voice notes are not transcribed by default; transcription is only used when you explicitly enable it for Premium entry writing or a book preview.',
   'privacy.deleteAccount': 'Delete account',
   'privacy.deleteTitle': 'Delete your account?',
   'privacy.deleteMessage':

@@ -32,6 +32,7 @@ import { VideoClip, VideoClipRow } from '@/components/feature/VideoClipRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { pollAudioTranscriptionJob, startAudioTranscription } from '@/utils/ai';
 import {
   createEntry,
   deleteEntry,
@@ -43,6 +44,7 @@ import {
 } from '@/utils/entries';
 import { useTranslation } from '@/utils/i18n';
 import { CapturedLocation, captureCurrentLocation } from '@/utils/location';
+import { fetchMe } from '@/utils/users';
 
 const MAX_PHOTOS = 5;
 const MAX_VIDEOS = 1;
@@ -147,6 +149,12 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     queryFn: () => fetchEntry(entryId!),
     enabled: isEditMode,
   });
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
+  const canTranscribeAudio = meQuery.data?.subscription_tier === 'premium';
 
   useEffect(() => {
     onEditModeChange?.(isEditMode);
@@ -355,6 +363,53 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     setAudios((a) => a.filter((existing) => existing.id !== id));
   };
 
+  const transcribeAudio = async (id: string) => {
+    const clip = audios.find((item) => item.id === id);
+    if (!clip || clip.uploading || !clip.storage_key) return;
+    if (!canTranscribeAudio) {
+      setError(t('editor.error.transcriptionPremium'));
+      return;
+    }
+
+    setError(null);
+    setAudios((items) =>
+      items.map((item) =>
+        item.id === id
+          ? { ...item, transcribing: true, transcriptionError: null }
+          : item,
+      ),
+    );
+
+    try {
+      const jobId = await startAudioTranscription(clip.storage_key);
+      const transcript = await pollAudioTranscriptionJob(jobId);
+      setAudios((items) =>
+        items.map((item) =>
+          item.id === id
+            ? { ...item, transcribing: false, transcript, transcriptionError: null }
+            : item,
+        ),
+      );
+      setBody((current) => {
+        const trimmed = current.trim();
+        return trimmed ? `${trimmed}\n\n${transcript}` : transcript;
+      });
+    } catch (e: any) {
+      const message =
+        e?.response?.data?.detail ??
+        e?.message ??
+        t('editor.error.transcriptionFailed');
+      setAudios((items) =>
+        items.map((item) =>
+          item.id === id
+            ? { ...item, transcribing: false, transcriptionError: message }
+            : item,
+        ),
+      );
+      setError(message);
+    }
+  };
+
   const submit = useMutation({
     mutationFn: async () => {
       const text = body.trim();
@@ -470,7 +525,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const anyUploading =
     photos.some((p) => p.uploading) ||
     videos.some((v) => v.uploading) ||
-    audios.some((a) => a.uploading);
+    audios.some((a) => a.uploading || a.transcribing);
   const editPending = isEditMode && !prefilled;
   const canSubmit = hasContent && !anyUploading && !submit.isPending && !editPending;
 
@@ -616,6 +671,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
             uploading={audios.some((a) => a.uploading)}
             onCaptured={onAudioCaptured}
             onRemove={removeAudio}
+            onTranscribe={transcribeAudio}
+            canTranscribe={canTranscribeAudio}
             disabled={audios.length >= MAX_AUDIOS}
           />
         )}

@@ -113,6 +113,8 @@ class BookGenerateRequest(BaseModel):
     def validate_date_range(self) -> "BookGenerateRequest":
         if self.date_end < self.date_start:
             raise ValueError("date_end must be on or after date_start")
+        if self.illustrated_required and self.mode == "photo_only":
+            raise ValueError("illustrated_required requires illustrated or mixed mode")
         return self
 
 

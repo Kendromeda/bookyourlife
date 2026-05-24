@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.entry import Entry, EntryAudio, EntryPhoto, EntryVideo
+from app.services.storage.ownership import (
+    PURPOSE_ENTRY_AUDIO,
+    PURPOSE_ENTRY_PHOTO,
+    PURPOSE_ENTRY_VIDEO,
+    assert_owned_storage_key,
+)
 from app.services.storage.r2 import get_r2_storage
 
 logger = structlog.get_logger()
@@ -150,9 +156,13 @@ async def create_entry(
     await session.flush()
 
     for index, key in enumerate(photo_storage_keys):
+        assert_owned_storage_key(key, user_id, allowed_purposes=(PURPOSE_ENTRY_PHOTO,))
         session.add(EntryPhoto(entry_id=entry.id, storage_key=key, position=index))
 
     for index, video in enumerate(video_attachments):
+        assert_owned_storage_key(
+            video.storage_key, user_id, allowed_purposes=(PURPOSE_ENTRY_VIDEO,)
+        )
         session.add(
             EntryVideo(
                 entry_id=entry.id,
@@ -163,6 +173,9 @@ async def create_entry(
         )
 
     for index, audio in enumerate(audio_attachments):
+        assert_owned_storage_key(
+            audio.storage_key, user_id, allowed_purposes=(PURPOSE_ENTRY_AUDIO,)
+        )
         session.add(
             EntryAudio(
                 entry_id=entry.id,
@@ -219,9 +232,9 @@ async def update_entry(
         entry.weather = weather  # type: ignore[assignment]
 
     removed_storage_keys = [
-        *_diff_photos(entry, photos),
-        *_diff_videos(entry, videos),
-        *_diff_audios(entry, audios),
+        *_diff_photos(entry, photos, user_id),
+        *_diff_videos(entry, videos, user_id),
+        *_diff_audios(entry, audios, user_id),
     ]
     active_storage_keys = set(_entry_storage_keys(entry))
     orphaned_storage_keys = [
@@ -233,7 +246,7 @@ async def update_entry(
     return await get_entry(session, user_id=user_id, entry_id=entry_id)
 
 
-def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> list[str]:
+def _diff_photos(entry: Entry, items: list[PhotoUpdateItem], user_id: UUID) -> list[str]:
     existing_by_id = {p.id: p for p in entry.photos}
     keep_ids: set[UUID] = set()
     removed_storage_keys: list[str] = []
@@ -243,6 +256,9 @@ def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> list[str]:
             existing_by_id[item.id].position = index
             keep_ids.add(item.id)
         elif item.storage_key:
+            assert_owned_storage_key(
+                item.storage_key, user_id, allowed_purposes=(PURPOSE_ENTRY_PHOTO,)
+            )
             new_photo = EntryPhoto(
                 entry_id=entry.id,
                 storage_key=item.storage_key,
@@ -258,7 +274,7 @@ def _diff_photos(entry: Entry, items: list[PhotoUpdateItem]) -> list[str]:
     return removed_storage_keys
 
 
-def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
+def _diff_videos(entry: Entry, items: list[MediaUpdateItem], user_id: UUID) -> list[str]:
     existing_by_id = {v.id: v for v in entry.videos}
     keep_ids: set[UUID] = set()
     removed_storage_keys: list[str] = []
@@ -268,6 +284,9 @@ def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
             existing_by_id[item.id].position = index
             keep_ids.add(item.id)
         elif item.storage_key:
+            assert_owned_storage_key(
+                item.storage_key, user_id, allowed_purposes=(PURPOSE_ENTRY_VIDEO,)
+            )
             new_video = EntryVideo(
                 entry_id=entry.id,
                 storage_key=item.storage_key,
@@ -284,7 +303,7 @@ def _diff_videos(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
     return removed_storage_keys
 
 
-def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
+def _diff_audios(entry: Entry, items: list[MediaUpdateItem], user_id: UUID) -> list[str]:
     existing_by_id = {a.id: a for a in entry.audios}
     keep_ids: set[UUID] = set()
     removed_storage_keys: list[str] = []
@@ -294,6 +313,9 @@ def _diff_audios(entry: Entry, items: list[MediaUpdateItem]) -> list[str]:
             existing_by_id[item.id].position = index
             keep_ids.add(item.id)
         elif item.storage_key:
+            assert_owned_storage_key(
+                item.storage_key, user_id, allowed_purposes=(PURPOSE_ENTRY_AUDIO,)
+            )
             new_audio = EntryAudio(
                 entry_id=entry.id,
                 storage_key=item.storage_key,

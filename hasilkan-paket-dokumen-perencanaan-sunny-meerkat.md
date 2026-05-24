@@ -194,7 +194,7 @@ Book-Your-Life-app/
 2. **Setup Dependencies** (2h): Install dependencies penting:
    ```bash
    npm install @react-navigation/native expo-router axios zustand expo-sqlite nativewind react-native-reanimated
-   npm install @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/messaging
+   npm install @clerk/clerk-expo expo-secure-store expo-notifications
    ```
 3. **Folder Structure** (2h): Buat folder struktur sesuai arsitektur (`app/`, `components/`, `hooks/`, `utils/`, `constants/`).
 4. **Theme & DesignSystem** (1h): Setup `constants/Colors.ts` dan konfigurasi NativeWind (Tailwind CSS) dengan palet warna hangat (cream `#FAF6F0`, ink `#2C2421`, accent `#C4886B`).
@@ -224,7 +224,7 @@ Book-Your-Life-app/
      "pgvector>=0.3",
      "celery[redis]>=5.4",
      "redis>=5.2",
-     "firebase-admin>=6.5",
+     "python-jose[cryptography]>=3.3",
      "openai>=1.54",
      "replicate>=1.0",
      "boto3>=1.35",         # R2 (S3-compatible)
@@ -234,11 +234,11 @@ Book-Your-Life-app/
      "structlog>=24.4",
    ]
    ```
-2. **Settings** (1h): `app/config.py` pakai `pydantic_settings.BaseSettings`. Field: `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `FIREBASE_CREDENTIALS_JSON`, `R2_*`, `LULU_*`, `REVENUECAT_WEBHOOK_SECRET`. `.env.example` di-commit.
+2. **Settings** (1h): `app/config.py` pakai `pydantic_settings.BaseSettings`. Field: `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `CLERK_JWKS_URL`, `CLERK_SECRET_KEY`, `R2_*`, `LULU_*`, `REVENUECAT_WEBHOOK_SECRET`. `.env.example` di-commit.
 3. **Database init** (2h): SQLAlchemy 2.0 async engine. `alembic init`. Initial migration: tabel `users`, `entries`, `entry_photos`, `questions`, `books`, `chapters`, `orders`. pgvector extension via `op.execute("CREATE EXTENSION IF NOT EXISTS vector")`.
-4. **Auth dependency** (2h): `app/deps.py::get_current_user` verifikasi Firebase ID token via `firebase_admin.auth.verify_id_token`, return `User` ORM atau 401.
+4. **Auth dependency** (2h): `app/deps.py::get_current_user` verifikasi Clerk session JWT via JWKS (`python-jose`), return `User` ORM atau 401.
 5. **Celery app** (1h): `app/tasks/celery_app.py` dengan Redis broker. Beat schedule untuk daily question generation per user (cron 06:00 default, override via user setting).
-6. **Health & v1 endpoints stub** (1h): `GET /healthz`, `GET /api/v1/me` (return Firebase user info).
+6. **Health & v1 endpoints stub** (1h): `GET /healthz`, `GET /api/v1/me` (return Clerk user info).
 7. **docker-compose** (1h): postgres 16 dengan pgvector image, redis 7, dan service `worker` + `api` + `beat`. Mount `./backend:/app`.
 8. **CI** (1h): GH Actions matrix Python 3.12 → `ruff check`, `mypy`, `pytest`.
 
@@ -256,7 +256,7 @@ Book-Your-Life-app/
 ```
 users
   id UUID PK
-  firebase_uid TEXT UNIQUE NOT NULL
+  clerk_id TEXT UNIQUE NOT NULL
   display_name TEXT
   email TEXT
   face_photo_url TEXT NULL          -- R2 key, optional
@@ -353,7 +353,7 @@ orders
 | `POST` | `/api/v1/webhooks/revenuecat` | subscription state | 3 |
 | `POST` | `/api/v1/webhooks/lulu` | print status | 4 |
 
-Auth: Firebase ID token di `Authorization: Bearer <token>` untuk semua kecuali webhook.
+Auth: Clerk session JWT di `Authorization: Bearer <token>` untuk semua kecuali webhook.
 
 ---
 

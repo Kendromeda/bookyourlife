@@ -24,8 +24,8 @@ export const unstable_settings = {
 };
 
 const publishableKey =
-  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined) ??
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined) ??
   '';
 
 function useAuthGate() {

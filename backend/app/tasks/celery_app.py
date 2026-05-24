@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.tasks.book_gen",
         "app.tasks.book_pipeline",
         "app.tasks.image_gen",
+        "app.tasks.audio_transcription",
         "app.tasks.notification",
     ],
 )

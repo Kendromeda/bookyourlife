@@ -78,7 +78,7 @@ async def _run(book_id: UUID) -> None:
             await _transcribe_missing_audio(entries)
 
         storage = get_r2_storage()
-        media_pages = _build_media_pages(entries, storage, book.include_voice_transcripts)
+        media_pages = _build_media_pages(entries, book.include_voice_transcripts)
         preview = _generate_preview_json(book, entries, settings)
         cover_url = None
         if book.image_mode != "none":
@@ -174,12 +174,13 @@ def _generate_cover(book: Book, preview: dict, settings, storage) -> str | None:
         if not response.data:
             return None
         image_bytes = _image_data_to_bytes(response.data[0])
-        storage_key = storage.upload_bytes(
+        # Persist the bucket key, not a signed URL — the preview serializer
+        # signs it at response time (private bucket, expiring URLs).
+        return storage.upload_bytes(
             key_prefix=f"book-cover/{book.id}",
             data=image_bytes,
             content_type="image/png",
         )
-        return storage.public_url(storage_key)
     except Exception as exc:
         logger.warning("book cover generation failed", book_id=str(book.id), error=str(exc))
         return None
@@ -213,9 +214,10 @@ def _entries_for_prompt(entries: list[Entry], include_voice_transcripts: bool) -
 
 def _build_media_pages(
     entries: list[Entry],
-    storage,
     include_voice_transcripts: bool,
 ) -> list[dict]:
+    # Persist bare storage keys; the preview serializer signs them into
+    # short-lived read URLs at response time (private bucket).
     pages: list[dict] = []
     for entry in entries:
         caption = entry.title or entry.written_at.date().isoformat()
@@ -223,7 +225,7 @@ def _build_media_pages(
             pages.append(
                 {
                     "type": "photo",
-                    "url": storage.public_url(photo.storage_key),
+                    "storage_key": photo.storage_key,
                     "entry_id": str(entry.id),
                     "caption": caption,
                 }
@@ -232,7 +234,7 @@ def _build_media_pages(
             pages.append(
                 {
                     "type": "video",
-                    "url": storage.public_url(video.storage_key),
+                    "storage_key": video.storage_key,
                     "entry_id": str(entry.id),
                     "caption": caption,
                 }
@@ -241,7 +243,7 @@ def _build_media_pages(
             pages.append(
                 {
                     "type": "audio",
-                    "url": storage.public_url(audio.storage_key),
+                    "storage_key": audio.storage_key,
                     "entry_id": str(entry.id),
                     "caption": caption,
                     "transcript": audio.transcript if include_voice_transcripts else None,

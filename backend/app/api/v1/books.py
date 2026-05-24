@@ -2,12 +2,13 @@ from datetime import UTC, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.deps import CurrentUser, SessionDep
 from app.models.book import Book, BookPlan
+from app.rate_limit import limiter
 from app.schemas.book import (
     BookGenerateRequest,
     BookGenerateResponse,
@@ -20,7 +21,7 @@ from app.schemas.book import (
     BookPreviewResponse,
     BookTweaksUpdate,
 )
-from app.services.storage.r2 import get_r2_storage
+from app.services.storage.r2 import get_r2_storage, media_read_url
 from app.tasks.book_gen import generate_book
 from app.tasks.book_pipeline import generate_book_pipeline
 
@@ -83,7 +84,6 @@ def _serialize(book: Book) -> BookPreviewResponse:
     the wire too — needed for any future delete / re-upload flow.
     """
     data = book.preview_data or {}
-    storage = None
     illustrations: dict = {}
     for slot_id, entry in (book.illustrations or {}).items():
         if not isinstance(entry, dict):
@@ -91,20 +91,18 @@ def _serialize(book: Book) -> BookPreviewResponse:
         key = entry.get("storage_key")
         if not key:
             continue
-        # Tolerate legacy rows that stored a full URL under "storage_key"
-        # (the pre-Phase-2 shape) — pass it through unchanged so old
-        # books still render.
-        if str(key).startswith("http"):
-            public = key
-        else:
-            if storage is None:
-                storage = get_r2_storage()
-            public = storage.public_url(key)
+        # media_read_url signs bucket keys and passes through legacy full URLs.
         illustrations[slot_id] = {
             "storage_key": key,
-            "public_url": public,
+            "public_url": media_read_url(str(key)),
             **({"crop": entry["crop"]} if entry.get("crop") is not None else {}),
         }
+    # media_pages persist bare storage keys (book_gen) — sign at response time.
+    media_pages = [
+        {**page, "url": media_read_url(str(page.get("storage_key") or page.get("url") or ""))}
+        for page in data.get("media_pages", [])
+        if isinstance(page, dict)
+    ]
     return BookPreviewResponse(
         id=book.id,
         status=book.status,  # type: ignore[arg-type]
@@ -114,10 +112,10 @@ def _serialize(book: Book) -> BookPreviewResponse:
         period_start=book.period_start,
         period_end=book.period_end,
         title=book.title,
-        cover_image_url=book.cover_image_url,
+        cover_image_url=media_read_url(book.cover_image_url) if book.cover_image_url else None,
         opening_letter=book.opening_letter,
         chapters=data.get("chapters", []),
-        media_pages=data.get("media_pages", []),
+        media_pages=media_pages,
         reflection=data.get("reflection", {}),
         error=book.error,
         illustrations=illustrations,
@@ -193,7 +191,9 @@ def _generation_worker_ready() -> tuple[bool, str | None]:
     response_model=BookGenerateResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("5/minute")
 async def create_generated_book(
+    request: Request,
     payload: BookGenerateRequest,
     user: CurrentUser,
     session: SessionDep,
@@ -255,7 +255,9 @@ async def create_generated_book(
     response_model=BookPreviewCreateResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("5/minute")
 async def create_book_preview(
+    request: Request,
     payload: BookPreviewRequest,
     user: CurrentUser,
     session: SessionDep,

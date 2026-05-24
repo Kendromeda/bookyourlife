@@ -1,4 +1,5 @@
 from app.models.ai_image_job import AiImageJob, AiImageJobStatus
+from app.models.audio_transcription_job import AudioTranscriptionJob
 from app.models.book import (
     Book,
     BookChapter,
@@ -18,6 +19,7 @@ from app.models.user import User
 __all__ = [
     "AiImageJob",
     "AiImageJobStatus",
+    "AudioTranscriptionJob",
     "Book",
     "BookChapter",
     "BookChapterEntry",

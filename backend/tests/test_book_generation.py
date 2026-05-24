@@ -19,9 +19,14 @@ from app.models.user import User
 from app.schemas.book import BookGenerateRequest
 from app.tasks import book_pipeline
 from app.tasks.book_pipeline import (
+    _AssetRequest,
+    _fallback_asset,
     _fallback_enhancement,
     _fallback_plan,
+    _image_asset_requests,
     _normalize_plan_payload,
+    _raise_if_required_illustrations_failed,
+    _storage_public_url,
 )
 
 QUOTE_SPOTLIGHT_TEMPLATE = 4
@@ -46,6 +51,16 @@ class FakeSession:
 def test_book_generate_request_rejects_invalid_date_range() -> None:
     with pytest.raises(ValidationError):
         BookGenerateRequest(date_start=date(2026, 2, 1), date_end=date(2026, 1, 1))
+
+
+def test_book_generate_request_rejects_required_illustrations_for_photo_only() -> None:
+    with pytest.raises(ValidationError):
+        BookGenerateRequest(
+            date_start=date(2026, 1, 1),
+            date_end=date(2026, 1, 31),
+            mode="photo_only",
+            illustrated_required=True,
+        )
 
 
 def test_create_generated_book_sets_generation_flow_and_enqueues(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -308,6 +323,94 @@ def test_fallback_enhancement_chooses_diary_style_for_text_only_entry() -> None:
 
     assert enhancement["layout_template"] == QUOTE_SPOTLIGHT_TEMPLATE
     assert enhancement["pull_quote"] == "This was a quiet day."
+
+
+def test_photo_only_image_requests_do_not_create_chapter_openers() -> None:
+    user_id = uuid4()
+    book = Book(
+        id=uuid4(),
+        user_id=user_id,
+        timeframe="custom",
+        style="watercolor",
+        status="queued",
+        config={
+            "flow": "generation",
+            "mode": "photo_only",
+            "cover_mode": "best_photo",
+            "style_preset": "watercolor",
+        },
+    )
+    entries = [
+        Entry(
+            id=uuid4(),
+            user_id=user_id,
+            body="Entry with no photos but enough words to be included.",
+            written_at=datetime(2026, 1, 1, tzinfo=UTC),
+            emotion_tags=[],
+            photos=[],
+            audios=[],
+        )
+    ]
+
+    requests = _image_asset_requests(book, None, [], entries)
+
+    assert [request.asset_type for request in requests] == ["cover"]
+    assert requests[0].requires_generation is False
+
+
+def test_illustrated_required_fails_when_most_chapter_assets_fallback() -> None:
+    book = Book(
+        id=uuid4(),
+        user_id=uuid4(),
+        timeframe="custom",
+        style="watercolor",
+        status="queued",
+        config={
+            "flow": "generation",
+            "mode": "illustrated",
+            "cover_mode": "best_photo",
+            "illustrated_required": True,
+        },
+    )
+    request = _AssetRequest(
+        asset_type="chapter_opener",
+        ref_id=uuid4(),
+        prompt="Chapter opener",
+        alt_text="Chapter opener",
+    )
+    assets = [
+        _fallback_asset(book, request, "paper_texture_placeholder"),
+        _fallback_asset(
+            book,
+            _AssetRequest(
+                asset_type="chapter_opener",
+                ref_id=uuid4(),
+                prompt="Chapter opener 2",
+                alt_text="Chapter opener 2",
+            ),
+            "paper_texture_placeholder",
+        ),
+    ]
+
+    with pytest.raises(book_pipeline._BookGenerationError):
+        _raise_if_required_illustrations_failed(book, assets)
+
+
+def test_storage_public_url_returns_empty_when_r2_unconfigured(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Private-bucket model: a bucket key with no R2 credentials configured
+    # cannot be signed, so it resolves to an empty (non-renderable) URL.
+    monkeypatch.setattr(
+        book_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            r2_endpoint="",
+            r2_access_key_id="",
+            r2_secret_access_key="",
+            r2_bucket="",
+        ),
+    )
+
+    assert _storage_public_url("entry-photo/user/photo.jpg") == ""
 
 
 def test_generation_llm_client_uses_timeout_and_no_retries(monkeypatch) -> None:  # type: ignore[no-untyped-def]

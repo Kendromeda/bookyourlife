@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Bootstrap
+
+- **Read `graphify-out/` at the start of every new session.** Contains the latest codebase graph/analysis output (`GRAPH_REPORT.md`, `graph.json`, `manifest.json`, `.graphify_analysis.json`, `.graphify_ast.json`, `.graphify_chunks.json`, `.graphify_chunk_01..24.json`, `.graphify_semantic_new.json`, `cost.json`). Use these as the primary map of the repo before answering or editing.
+
 ## Operational Landmines & Conventions
 
 - **Master Plan**: Selalu rujuk `hasilkan-paket-dokumen-perencanaan-sunny-meerkat.md` sebagai source of truth arsitektur, API, DB schema, dan urutan fase pengerjaan.

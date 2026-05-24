@@ -58,6 +58,20 @@ class ImageJobStatusResponse(BaseModel):
     error: str | None = None
 
 
+class AudioTranscriptionRequest(BaseModel):
+    storage_key: str = Field(min_length=1, max_length=512)
+
+
+class AudioTranscriptionResponse(BaseModel):
+    job_id: str
+
+
+class AudioTranscriptionStatusResponse(BaseModel):
+    status: Literal["pending", "processing", "done", "failed"]
+    transcript: str | None = None
+    error: str | None = None
+
+
 class AiDiagnosticsResponse(BaseModel):
     openai_configured: bool
     r2_configured: bool

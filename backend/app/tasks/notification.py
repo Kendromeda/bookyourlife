@@ -1,10 +1,10 @@
-import asyncio
 from uuid import UUID
 
 import structlog
 
 from app.db import session_scope
 from app.services.push.fcm import FcmService
+from app.tasks.async_runner import run_async
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 @celery_app.task(name="app.tasks.notification.send_push")
 def send_push(user_id: str, title: str, body: str, deep_link: str | None = None) -> int:
     """Send Expo push notification to all registered devices for a user."""
-    return asyncio.run(_send_async(UUID(user_id), title, body, deep_link))
+    return run_async(_send_async(UUID(user_id), title, body, deep_link))
 
 
 async def _send_async(user_id: UUID, title: str, body: str, deep_link: str | None) -> int:

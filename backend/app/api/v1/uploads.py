@@ -1,11 +1,12 @@
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser
+from app.rate_limit import limiter
 from app.schemas.entry import DirectUploadOut, PresignedUploadOut
 from app.services.storage.r2 import get_r2_storage
 
@@ -41,7 +42,10 @@ class PresignedRequestIn(BaseModel):
 
 
 @router.post("/photo", response_model=PresignedUploadOut)
-async def presign_photo(payload: PresignedRequestIn, user: CurrentUser) -> PresignedUploadOut:
+@limiter.limit("60/minute")
+async def presign_photo(
+    request: Request, payload: PresignedRequestIn, user: CurrentUser
+) -> PresignedUploadOut:
     storage = get_r2_storage()
     prefix = f"{payload.purpose}/{user.id}"
     try:
@@ -63,7 +67,9 @@ async def presign_photo(payload: PresignedRequestIn, user: CurrentUser) -> Presi
 
 
 @router.post("/photo/direct", response_model=DirectUploadOut)
+@limiter.limit("30/minute")
 async def upload_photo_direct(
+    request: Request,
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
     purpose: Annotated[
@@ -82,7 +88,9 @@ async def upload_photo_direct(
 
 
 @router.post("/video/direct", response_model=DirectUploadOut)
+@limiter.limit("30/minute")
 async def upload_video_direct(
+    request: Request,
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
 ) -> DirectUploadOut:
@@ -97,7 +105,9 @@ async def upload_video_direct(
 
 
 @router.post("/audio/direct", response_model=DirectUploadOut)
+@limiter.limit("30/minute")
 async def upload_audio_direct(
+    request: Request,
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
 ) -> DirectUploadOut:

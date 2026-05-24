@@ -14,7 +14,7 @@ from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from openai import APIStatusError, OpenAI
 from sqlalchemy import select
@@ -22,8 +22,13 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.deps import CurrentUser, SessionDep
 from app.models.ai_image_job import AiImageJob, AiImageJobStatus
+from app.models.audio_transcription_job import AudioTranscriptionJob
+from app.rate_limit import limiter
 from app.schemas.ai import (
     AiDiagnosticsResponse,
+    AudioTranscriptionRequest,
+    AudioTranscriptionResponse,
+    AudioTranscriptionStatusResponse,
     HighlightsRequest,
     HighlightsResponse,
     ImageGenRequest,
@@ -34,7 +39,15 @@ from app.schemas.ai import (
     WritingPromptsRequest,
     WritingPromptsResponse,
 )
+from app.services.storage.ownership import (
+    PURPOSE_AI_REFERENCE,
+    PURPOSE_ENTRY_AUDIO,
+    PURPOSE_ENTRY_PHOTO,
+    PURPOSE_FACE_PHOTO,
+    assert_owned_storage_key,
+)
 from app.services.storage.r2 import get_r2_storage
+from app.tasks.audio_transcription import transcribe_audio
 from app.tasks.celery_app import celery_app
 from app.tasks.image_gen import generate_image
 
@@ -98,14 +111,15 @@ def _string_list(payload: dict, key: str) -> list[str]:
 def _validate_source_image_key(storage_key: str | None, user_id: UUID) -> str | None:
     if not storage_key:
         return None
-    allowed_prefixes = (
-        f"ai-reference/{user_id}/",
-        f"entry-photo/{user_id}/",
-        f"face-photo/{user_id}/",
+    return assert_owned_storage_key(
+        storage_key,
+        user_id,
+        allowed_purposes=(
+            PURPOSE_AI_REFERENCE,
+            PURPOSE_ENTRY_PHOTO,
+            PURPOSE_FACE_PHOTO,
+        ),
     )
-    if not storage_key.startswith(allowed_prefixes):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Source image is not allowed")
-    return storage_key
 
 
 def _queue_reachable() -> bool:
@@ -138,49 +152,57 @@ async def diagnostics(user: CurrentUser) -> AiDiagnosticsResponse:
 
 
 @router.post("/title-suggestions", response_model=TitleSuggestionsResponse)
+@limiter.limit("20/minute")
 async def title_suggestions(
-    request: TitleSuggestionsRequest,
+    request: Request,
+    payload: TitleSuggestionsRequest,
     user: CurrentUser,
 ) -> TitleSuggestionsResponse:
-    payload = _chat_json("title_suggestions.j2", request.body)
-    return TitleSuggestionsResponse(titles=_string_list(payload, "titles")[:3])
+    result = _chat_json("title_suggestions.j2", payload.body)
+    return TitleSuggestionsResponse(titles=_string_list(result, "titles")[:3])
 
 
 @router.post("/writing-prompts", response_model=WritingPromptsResponse)
+@limiter.limit("20/minute")
 async def writing_prompts(
-    request: WritingPromptsRequest,
+    request: Request,
+    payload: WritingPromptsRequest,
     user: CurrentUser,
 ) -> WritingPromptsResponse:
-    payload = _chat_json("writing_prompts.j2", request.body)
-    return WritingPromptsResponse(prompts=_string_list(payload, "prompts")[:3])
+    result = _chat_json("writing_prompts.j2", payload.body)
+    return WritingPromptsResponse(prompts=_string_list(result, "prompts")[:3])
 
 
 @router.post("/highlights", response_model=HighlightsResponse)
+@limiter.limit("20/minute")
 async def highlights(
-    request: HighlightsRequest,
+    request: Request,
+    payload: HighlightsRequest,
     user: CurrentUser,
 ) -> HighlightsResponse:
-    payload = _chat_json("highlights.j2", request.body)
-    return HighlightsResponse(highlights=_string_list(payload, "highlights")[:5])
+    result = _chat_json("highlights.j2", payload.body)
+    return HighlightsResponse(highlights=_string_list(result, "highlights")[:5])
 
 
 @router.post("/image-gen", response_model=ImageGenResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def start_image_gen(
-    request: ImageGenRequest,
+    request: Request,
+    payload: ImageGenRequest,
     user: CurrentUser,
     session: SessionDep,
 ) -> ImageGenResponse:
     source_image_storage_key = _validate_source_image_key(
-        request.source_image_storage_key,
+        payload.source_image_storage_key,
         user.id,
     )
     rendered_prompt = _render_prompt(
         "image_memory_visual.j2",
-        body=request.body.strip(),
-        prompt=(request.prompt or "").strip(),
-        style=request.style,
-        intensity=request.intensity,
-        purpose=request.purpose,
+        body=payload.body.strip(),
+        prompt=(payload.prompt or "").strip(),
+        style=payload.style,
+        intensity=payload.intensity,
+        purpose=payload.purpose,
         has_source_image=bool(source_image_storage_key),
     )
     job = AiImageJob(
@@ -224,5 +246,78 @@ async def image_gen_status(
         status=job.status.value if hasattr(job.status, "value") else str(job.status),
         storage_key=job.storage_key,
         public_url=public_url,
+        error=job.error,
+    )
+
+
+@router.post(
+    "/audio-transcriptions",
+    response_model=AudioTranscriptionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit("20/minute")
+async def start_audio_transcription(
+    request: Request,
+    payload: AudioTranscriptionRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> AudioTranscriptionResponse:
+    if user.subscription_tier != "premium":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Audio transcription requires Premium",
+        )
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "OpenAI not configured",
+        )
+
+    storage_key = assert_owned_storage_key(
+        payload.storage_key,
+        user.id,
+        allowed_purposes=(PURPOSE_ENTRY_AUDIO,),
+    )
+    job = AudioTranscriptionJob(
+        user_id=user.id,
+        storage_key=storage_key,
+        status="pending",
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+
+    try:
+        transcribe_audio.delay(str(job.id))
+    except Exception as exc:
+        logger.warning("audio transcription enqueue failed", job_id=str(job.id), error=str(exc))
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Audio transcription queue unavailable",
+        ) from exc
+
+    return AudioTranscriptionResponse(job_id=str(job.id))
+
+
+@router.get(
+    "/audio-transcriptions/{job_id}",
+    response_model=AudioTranscriptionStatusResponse,
+)
+async def audio_transcription_status(
+    job_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+) -> AudioTranscriptionStatusResponse:
+    stmt = select(AudioTranscriptionJob).where(AudioTranscriptionJob.id == job_id)
+    job = (await session.execute(stmt)).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Audio transcription job not found")
+    if job.user_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
+    return AudioTranscriptionStatusResponse(
+        status=job.status,  # type: ignore[arg-type]
+        transcript=job.transcript,
         error=job.error,
     )

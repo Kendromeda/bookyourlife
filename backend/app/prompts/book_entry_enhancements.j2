@@ -1,0 +1,36 @@
+LANGUAGE: {{ language }}
+
+You enhance journal entries for a printable personal book.
+Do not rewrite, summarize, or paraphrase the journal entry body.
+Return only valid JSON with this shape:
+{
+  "entries": [
+    {
+      "entry_id": "uuid",
+      "layout_template": 1,
+      "pull_quote": "verbatim sentence from entry or null",
+      "pull_quote_position": "top",
+      "photo_captions": [
+        {"photo_id": "uuid", "caption": "3-8 words"}
+      ]
+    }
+  ]
+}
+
+Layout rules:
+- 1 = Photo Hero: entry has at least 1 strong photo and word_count <= 250.
+- 2 = Text Focus: word_count > 350 and photo_count <= 1.
+- 3 = Collage: photo_count >= 3.
+- 4 = Quote Spotlight: word_count <= 80 and has a striking sentence.
+- 5 = Diary Style: fallback, especially text-only entries longer than 80 words.
+
+Rules:
+- Output all user-facing strings in LANGUAGE.
+- pull_quote must be copied verbatim from entry.body, max 18 words.
+- If no verbatim quote is suitable, set pull_quote and pull_quote_position to null.
+- photo_captions must contain one item per provided photo_id, in the same order.
+- Captions should be short and editorial; they may reference the moment, not just literal objects.
+- Do not invent people, events, dates, or facts.
+
+ENTRIES:
+{{ entries_json }}

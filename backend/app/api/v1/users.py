@@ -1,12 +1,22 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from app.deps import CurrentUser, SessionDep
+from app.rate_limit import limiter
 from app.schemas.user import FcmTokenIn, UserOut, UserStatsOut, UserUpsertIn
 from app.services import users as users_service
 from app.services.push.fcm import FcmService
+from app.services.storage.ownership import (
+    PURPOSE_FACE_PHOTO,
+    StorageKeyOwnershipError,
+    assert_owned_storage_key,
+)
 from app.services.storage.r2 import get_r2_storage
 
 router = APIRouter()
+
+
+def _is_http_url(value: str) -> bool:
+    return value.startswith(("http://", "https://"))
 
 
 @router.get("/me", response_model=UserOut)
@@ -19,7 +29,20 @@ async def update_me(payload: UserUpsertIn, user: CurrentUser, session: SessionDe
     if payload.display_name is not None:
         user.display_name = payload.display_name
     if payload.face_photo_url is not None:
-        user.face_photo_url = payload.face_photo_url
+        # Reject keys that aren't this user's own face-photo upload (IDOR);
+        # only tolerate an existing legacy absolute URL when it is unchanged.
+        if _is_http_url(payload.face_photo_url):
+            if payload.face_photo_url != user.face_photo_url:
+                raise StorageKeyOwnershipError(
+                    "Profile photo must be an owned face-photo upload"
+                )
+            user.face_photo_url = payload.face_photo_url
+        else:
+            user.face_photo_url = assert_owned_storage_key(
+                payload.face_photo_url,
+                user.id,
+                allowed_purposes=(PURPOSE_FACE_PHOTO,),
+            )
     if payload.notif_hour is not None:
         user.notif_hour = payload.notif_hour
     if payload.timezone is not None:
@@ -50,8 +73,11 @@ async def my_stats(user: CurrentUser, session: SessionDep) -> UserStatsOut:
 
 
 @router.get("/me/export")
-async def export_my_data(user: CurrentUser, session: SessionDep) -> dict:
-    """JSON dump of the user's entries with media URLs rewritten to public R2 URLs."""
+@limiter.limit("5/hour")
+async def export_my_data(
+    request: Request, user: CurrentUser, session: SessionDep
+) -> dict:
+    """JSON dump of the user's entries with media keys rewritten to signed R2 URLs."""
     snapshot = await users_service.export_user_data(session, user_id=user.id)
     storage = get_r2_storage()
     for entry in snapshot["entries"]:

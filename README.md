@@ -1,25 +1,27 @@
-/ini# Life Book
+# Life Book
 
 Aplikasi mobile journaling AI: pertanyaan harian yang mengingat riwayat cerita, output buku narasi dengan ilustrasi AI personal, opsi cetak fisik.
 
-Status: **Phase 0 — scaffolding selesai 2026-04-28**.
-
 ## Layout
 
-- `android/` — Kotlin + Jetpack Compose, multi-module Clean Architecture (Hilt, Room, Retrofit, Firebase, RevenueCat)
+- `app/` — Expo Router screens (auth flow, tabs, book viewer)
+- `components/`, `hooks/`, `utils/`, `stores/`, `constants/` — RN UI, hooks, API client, Zustand stores, theme
 - `backend/` — Python 3.12 + FastAPI + Celery + PostgreSQL 16 (pgvector) + Redis
-- `docs/` — PRD dan dokumen perencanaan
-- `.github/workflows/` — CI per stack
+- `.github/workflows/` — CI per stack (Expo lint/typecheck, backend ruff/mypy/pytest)
 
 ## Quickstart
 
-### Android
+### Mobile (Expo / React Native)
 
-Buka `android/` di Android Studio (Hedgehog atau lebih baru). Sebelum build pertama:
+```bash
+npm install
+npx expo start                   # press a (Android), i (iOS), w (web)
+```
 
-1. Salin `android/app/google-services.json.example` → `android/app/google-services.json` dan isi dengan service account dari Firebase project.
-2. Sync Gradle.
-3. Run `./gradlew :app:assembleDebug` untuk verifikasi.
+Configure environment (no secrets are committed):
+
+- `EXPO_PUBLIC_API_BASE_URL` — backend base URL (use `https://…` for non-local; dev defaults to the Android emulator host `http://10.0.2.2:8000`)
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` — Clerk publishable key
 
 ### Backend
 
@@ -41,11 +43,11 @@ python -m playwright install chromium
 
 ## Dokumen
 
-- Plan eksekusi master: `~/.claude/plans/hasilkan-paket-dokumen-perencanaan-sunny-meerkat.md`
+- Plan eksekusi master: `hasilkan-paket-dokumen-perencanaan-sunny-meerkat.md`
 - PRD lengkap: `docs/prd.md` (perlu di-checkin)
 
 ## Stack ringkas
 
-LLM: OpenAI (gpt-4o + text-embedding-3-small) · Image gen: GPT 2.0 · Auth+Push: Firebase · Storage: Cloudflare R2 · Subscription: RevenueCat · Print: Lulu Direct.
+Mobile: Expo + React Native + TypeScript (expo-router, Zustand, TanStack Query) · LLM: OpenAI (gpt-4o + text-embedding-3-small) · Image gen: OpenAI GPT Image · Auth: Clerk · Push: Expo Push API · Storage: Cloudflare R2 · Subscription: RevenueCat · Print: Lulu Direct.
 
 Bahasa primary: Inggris.

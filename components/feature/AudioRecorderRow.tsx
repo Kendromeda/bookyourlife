@@ -22,6 +22,9 @@ export type RecordedClip = {
   uploading: boolean;
   storage_key: string | null;
   existing_id?: string;
+  transcribing?: boolean;
+  transcript?: string | null;
+  transcriptionError?: string | null;
 };
 
 export type AudioRecorderRowProps = {
@@ -29,6 +32,8 @@ export type AudioRecorderRowProps = {
   uploading: boolean;
   onCaptured: (uri: string, durationSeconds: number) => void;
   onRemove: (id: string) => void;
+  onTranscribe?: (id: string) => void;
+  canTranscribe?: boolean;
   disabled?: boolean;
 };
 
@@ -42,6 +47,8 @@ export function AudioRecorderRow({
   clips,
   onCaptured,
   onRemove,
+  onTranscribe,
+  canTranscribe = false,
   disabled,
 }: AudioRecorderRowProps) {
   const scheme = useColorScheme() ?? 'light';
@@ -84,7 +91,13 @@ export function AudioRecorderRow({
   return (
     <View style={{ marginTop: Spacing.lg }}>
       {clips.map((clip) => (
-        <ClipPreview key={clip.id} clip={clip} onRemove={() => onRemove(clip.id)} />
+        <ClipPreview
+          key={clip.id}
+          clip={clip}
+          onRemove={() => onRemove(clip.id)}
+          onTranscribe={onTranscribe ? () => onTranscribe(clip.id) : undefined}
+          canTranscribe={canTranscribe}
+        />
       ))}
 
       <TouchableOpacity
@@ -116,7 +129,17 @@ export function AudioRecorderRow({
   );
 }
 
-function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => void }) {
+function ClipPreview({
+  clip,
+  onRemove,
+  onTranscribe,
+  canTranscribe,
+}: {
+  clip: RecordedClip;
+  onRemove: () => void;
+  onTranscribe?: () => void;
+  canTranscribe: boolean;
+}) {
   const scheme = useColorScheme() ?? 'light';
   const c = Colors[scheme];
   const { t } = useTranslation();
@@ -142,6 +165,8 @@ function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => v
       player.play();
     }
   };
+  const canRequestTranscript =
+    Boolean(clip.storage_key) && !/^https?:\/\//.test(clip.storage_key ?? '');
 
   return (
     <View style={[styles.clipRow, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -161,7 +186,36 @@ function ClipPreview({ clip, onRemove }: { clip: RecordedClip; onRemove: () => v
         <Text style={[styles.clipMeta, { color: c.muted }]}>
           {formatDuration(clip.duration_seconds)}
           {clip.uploading ? ` · ${t('editor.uploading')}` : ''}
+          {clip.transcribing ? ` · ${t('editor.transcribing')}` : ''}
         </Text>
+        {clip.transcript ? (
+          <Text style={[styles.transcriptText, { color: c.text }]} numberOfLines={2}>
+            {clip.transcript}
+          </Text>
+        ) : null}
+        {clip.transcriptionError ? (
+          <Text style={[styles.clipError, { color: c.danger }]} numberOfLines={2}>
+            {clip.transcriptionError}
+          </Text>
+        ) : null}
+        {!clip.uploading && canRequestTranscript && !clip.transcript ? (
+          <TouchableOpacity
+            onPress={onTranscribe}
+            disabled={!canTranscribe || clip.transcribing || !onTranscribe}
+            style={[
+              styles.transcribeBtn,
+              {
+                borderColor: c.border,
+                opacity: canTranscribe && !clip.transcribing ? 1 : 0.55,
+              },
+            ]}
+          >
+            {clip.transcribing ? <ActivityIndicator color={c.accent} size="small" /> : null}
+            <Text style={[styles.transcribeLabel, { color: c.text }]}>
+              {canTranscribe ? t('editor.transcribeToJournal') : t('editor.transcribePremium')}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <TouchableOpacity onPress={onRemove} style={styles.clipRemove}>
         <IconSymbol name="xmark" size={14} color={c.muted} />
@@ -200,6 +254,20 @@ const styles = StyleSheet.create({
   },
   clipLabel: { fontSize: 14, fontWeight: '500' },
   clipMeta: { fontSize: 12, marginTop: 2 },
+  transcriptText: { fontSize: 13, lineHeight: 18, marginTop: Spacing.xs },
+  clipError: { fontSize: 12, lineHeight: 17, marginTop: Spacing.xs },
+  transcribeBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: Radii.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    marginTop: Spacing.sm,
+  },
+  transcribeLabel: { fontSize: 12, fontWeight: '600' },
   clipRemove: { padding: Spacing.xs },
   error: { fontSize: 13, marginTop: Spacing.sm },
 });

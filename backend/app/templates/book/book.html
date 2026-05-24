@@ -13,7 +13,7 @@
     }
     .page {
       width: 148mm;
-      min-height: 210mm;
+      height: 210mm;
       page-break-after: always;
       position: relative;
       overflow: hidden;
@@ -27,17 +27,42 @@
       flex-direction: column;
       justify-content: flex-end;
       padding: 24mm 18mm;
-      background:
-        linear-gradient(rgba(43,43,43,0.12), rgba(43,43,43,0.35)),
-        linear-gradient(145deg, #d8c39d, #f5eddc 48%, #b7c1a1);
       color: #241c17;
+      background:
+        linear-gradient(rgba(43,43,43,0.10), rgba(43,43,43,0.34)),
+        linear-gradient(145deg, #d8c39d, #f5eddc 48%, #b7c1a1);
     }
+    .cover.has-art {
+      background-size: cover;
+      background-position: center;
+    }
+    .cover.has-art::before,
+    .chapter-opener.has-art::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(rgba(247,241,227,0.10), rgba(36,28,23,0.42));
+      z-index: 0;
+    }
+    .cover > *,
+    .chapter-opener > * { position: relative; z-index: 1; }
     h1, h2, h3 { font-weight: 500; margin: 0; }
     h1 { font-size: 34pt; line-height: 1.05; }
     h2 { font-size: 22pt; line-height: 1.15; margin-bottom: 8mm; }
     h3 { font-size: 15pt; margin-bottom: 4mm; }
     .subtitle { margin-top: 6mm; font-size: 13pt; font-style: italic; }
-    .small { color: #7b6d59; font-size: 9pt; letter-spacing: 0.08em; text-transform: uppercase; }
+    .small {
+      color: #7b6d59;
+      font-size: 9pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .cover .small,
+    .cover .subtitle,
+    .chapter-opener .small,
+    .chapter-opener .chapter-meta { color: #f7f1e3; text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+    .cover h1,
+    .chapter-opener h2 { text-shadow: 0 1px 5px rgba(0,0,0,0.32); }
     .body { font-size: 11pt; line-height: 1.62; }
     .body p { margin: 0 0 4mm; }
     .chapter-meta { margin-bottom: 10mm; color: #806f56; font-style: italic; }
@@ -53,14 +78,12 @@
     }
     .photo {
       display: inline-block;
-      max-width: 82mm;
       padding: 4mm 4mm 8mm;
-      margin: 4mm 0;
       background: #fffdf8;
       box-shadow: 0 2mm 5mm rgba(0,0,0,0.14);
-      transform: rotate(-1.5deg);
+      transform: rotate(var(--tilt, -1.5deg));
     }
-    .photo img { display: block; width: 100%; max-height: 85mm; object-fit: cover; }
+    .photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .caption {
       margin-top: 2mm;
       color: #6f604d;
@@ -92,10 +115,89 @@
       font-size: 8pt;
       text-align: center;
     }
+    .chapter-opener {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 22mm 18mm;
+      background:
+        linear-gradient(rgba(43,43,43,0.04), rgba(43,43,43,0.26)),
+        linear-gradient(145deg, #c9b992, #f3ead8 54%, #aeb99b);
+      background-size: cover;
+      background-position: center;
+    }
+    .template-photo-hero .photo {
+      width: 112mm;
+      height: 108mm;
+      margin: 4mm 0 6mm;
+    }
+    .template-text-focus .entry-main {
+      position: absolute;
+      top: 22mm;
+      left: 18mm;
+      right: 58mm;
+      bottom: 18mm;
+    }
+    .template-text-focus .photo {
+      position: absolute;
+      right: 12mm;
+      bottom: 28mm;
+      width: 42mm;
+      height: 58mm;
+      --tilt: 3deg;
+    }
+    .template-collage .collage {
+      position: relative;
+      height: 118mm;
+      margin-top: 2mm;
+    }
+    .template-collage .photo {
+      position: absolute;
+      width: 52mm;
+      height: 56mm;
+      margin: 0;
+    }
+    .template-collage .photo:nth-child(1) { left: 0; top: 0; --tilt: -3deg; }
+    .template-collage .photo:nth-child(2) { right: 0; top: 5mm; --tilt: 4deg; }
+    .template-collage .photo:nth-child(3) { left: 10mm; bottom: 0; --tilt: -2deg; }
+    .template-collage .photo:nth-child(4) { right: 8mm; bottom: 8mm; --tilt: 5deg; }
+    .template-quote .quote {
+      position: absolute;
+      top: 54mm;
+      left: 18mm;
+      right: 18mm;
+      font-size: 20pt;
+    }
+    .template-quote .entry-main {
+      position: absolute;
+      top: 132mm;
+      left: 22mm;
+      right: 22mm;
+      font-size: 10pt;
+    }
+    .template-diary .entry-art {
+      position: absolute;
+      top: 18mm;
+      right: 9mm;
+      width: 30mm;
+      max-height: 42mm;
+      object-fit: contain;
+      opacity: 0.88;
+    }
+    .template-diary .entry-main {
+      position: absolute;
+      top: 22mm;
+      left: 18mm;
+      right: 42mm;
+      bottom: 18mm;
+    }
   </style>
 </head>
 <body>
-  <section class="page cover">
+  <section
+    class="page cover{% if cover_asset and cover_asset.url %} has-art{% endif %}"
+    {% if cover_asset and cover_asset.url %}style="background-image: url('{{ cover_asset.url }}');"{% endif %}
+  >
     <div class="small">Life Book</div>
     <h1>{{ plan.generated_title }}</h1>
     {% if plan.subtitle %}<div class="subtitle">{{ plan.subtitle }}</div>{% endif %}
@@ -126,7 +228,11 @@
   </section>
 
   {% for chapter in chapters %}
-    <section class="page">
+    {% set chapter_asset = chapter_asset_by_chapter.get(chapter.id) %}
+    <section
+      class="page chapter-opener{% if chapter_asset and chapter_asset.url %} has-art{% endif %}"
+      {% if chapter_asset and chapter_asset.url %}style="background-image: url('{{ chapter_asset.url }}');"{% endif %}
+    >
       <div class="small">Chapter {{ chapter.position }}</div>
       <h2>{{ chapter.title }}</h2>
       {% if chapter.theme %}<div class="chapter-meta">{{ chapter.theme }}</div>{% endif %}
@@ -139,30 +245,102 @@
     {% for link in links_by_chapter[chapter.id] %}
       {% set entry = entry_by_id[link.entry_id] %}
       {% set enhancement = enhancement_by_entry.get(link.entry_id) %}
-      <section class="page">
-        <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
-        <h3>{{ entry.title or chapter.title }}</h3>
-        {% if enhancement and enhancement.pull_quote %}
-          <div class="quote">“{{ enhancement.pull_quote }}”</div>
-        {% endif %}
-        {% if entry.photos %}
-          <div class="photo">
-            <img src="{{ entry.photos[0].url }}" alt="">
-            {% if enhancement and enhancement.photo_captions %}
-              <div class="caption">{{ enhancement.photo_captions[0].caption }}</div>
-            {% endif %}
+      {% set layout = enhancement.layout_template if enhancement else 5 %}
+      {% set entry_asset = entry_asset_by_entry.get(link.entry_id) %}
+      {% set captions = enhancement.photo_captions if enhancement and enhancement.photo_captions else [] %}
+
+      {% if layout == 1 %}
+        <section class="page template-photo-hero">
+          <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+          <h3>{{ entry.title or chapter.title }}</h3>
+          {% if entry.photos %}
+            <div class="photo">
+              <img src="{{ entry.photos[0].url }}" alt="">
+              {% if captions and captions[0].caption %}<div class="caption">{{ captions[0].caption }}</div>{% endif %}
+            </div>
+          {% endif %}
+          <div class="body">
+            {% for paragraph in entry.paragraphs %}
+              <p>{{ paragraph }}</p>
+            {% endfor %}
           </div>
-        {% endif %}
-        <div class="body">
-          {% for paragraph in entry.paragraphs %}
-            <p>{{ paragraph }}</p>
-          {% endfor %}
-        </div>
-        {% if enhancement and enhancement.transcript %}
-          <div class="transcript">{{ enhancement.transcript }}</div>
-        {% endif %}
-        <div class="footer">{{ chapter.title }}</div>
-      </section>
+          {% if enhancement and enhancement.transcript %}<div class="transcript">{{ enhancement.transcript }}</div>{% endif %}
+          <div class="footer">{{ chapter.title }}</div>
+        </section>
+      {% elif layout == 2 %}
+        <section class="page template-text-focus">
+          <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+          <h3>{{ entry.title or chapter.title }}</h3>
+          <div class="body entry-main">
+            {% for paragraph in entry.paragraphs %}
+              <p>{{ paragraph }}</p>
+            {% endfor %}
+            {% if enhancement and enhancement.transcript %}<div class="transcript">{{ enhancement.transcript }}</div>{% endif %}
+          </div>
+          {% if entry.photos %}
+            <div class="photo">
+              <img src="{{ entry.photos[0].url }}" alt="">
+              {% if captions and captions[0].caption %}<div class="caption">{{ captions[0].caption }}</div>{% endif %}
+            </div>
+          {% endif %}
+          <div class="footer">{{ chapter.title }}</div>
+        </section>
+      {% elif layout == 3 %}
+        <section class="page template-collage">
+          <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+          <h3>{{ entry.title or chapter.title }}</h3>
+          <div class="collage">
+            {% for photo in entry.photos[:4] %}
+              <div class="photo">
+                <img src="{{ photo.url }}" alt="">
+                {% if captions|length > loop.index0 and captions[loop.index0].caption %}
+                  <div class="caption">{{ captions[loop.index0].caption }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="body">
+            {% for paragraph in entry.paragraphs %}
+              <p>{{ paragraph }}</p>
+            {% endfor %}
+          </div>
+          {% if enhancement and enhancement.transcript %}<div class="transcript">{{ enhancement.transcript }}</div>{% endif %}
+          <div class="footer">{{ chapter.title }}</div>
+        </section>
+      {% elif layout == 4 %}
+        <section class="page template-quote">
+          <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+          <h3>{{ entry.title or chapter.title }}</h3>
+          {% if enhancement and enhancement.pull_quote %}
+            <div class="quote">“{{ enhancement.pull_quote }}”</div>
+          {% endif %}
+          <div class="body entry-main">
+            {% for paragraph in entry.paragraphs %}
+              <p>{{ paragraph }}</p>
+            {% endfor %}
+            {% if enhancement and enhancement.transcript %}<div class="transcript">{{ enhancement.transcript }}</div>{% endif %}
+          </div>
+          <div class="footer">{{ chapter.title }}</div>
+        </section>
+      {% else %}
+        <section class="page template-diary">
+          <div class="entry-date">{{ entry.written_at.strftime('%B %d, %Y') if entry.written_at else '' }}</div>
+          <h3>{{ entry.title or chapter.title }}</h3>
+          {% if entry_asset and entry_asset.url %}
+            <img class="entry-art" src="{{ entry_asset.url }}" alt="">
+          {% endif %}
+          <div class="body entry-main">
+            {% if enhancement and enhancement.pull_quote and enhancement.pull_quote_position == 'top' %}
+              <div class="quote">“{{ enhancement.pull_quote }}”</div>
+            {% endif %}
+            {% for paragraph in entry.paragraphs %}
+              <p>{{ paragraph }}</p>
+            {% endfor %}
+            {% if enhancement and enhancement.transcript %}<div class="transcript">{{ enhancement.transcript }}</div>{% endif %}
+          </div>
+          <div class="footer">{{ chapter.title }}</div>
+        </section>
+      {% endif %}
     {% endfor %}
   {% endfor %}
 

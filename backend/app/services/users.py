@@ -2,12 +2,23 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.book import Book, GeneratedAsset
 from app.models.entry import Entry
 from app.models.user import User
+from app.services.storage.r2 import get_r2_storage
+
+logger = structlog.get_logger()
+
+
+def _is_bucket_key(value: str | None) -> bool:
+    return bool(value) and not value.startswith(  # type: ignore[union-attr]
+        ("http://", "https://", "file://", "data:")
+    )
 
 
 async def get_or_create_user(
@@ -101,10 +112,67 @@ async def get_user_stats(session: AsyncSession, *, user: User) -> dict[str, int]
     }
 
 
+async def _collect_user_storage_keys(session: AsyncSession, user: User) -> list[str]:
+    """Every R2 object key owned by the user (entry media, books, profile)."""
+    keys: list[str] = []
+
+    entries = (
+        await session.execute(
+            select(Entry)
+            .where(Entry.user_id == user.id)
+            .options(
+                selectinload(Entry.photos),
+                selectinload(Entry.videos),
+                selectinload(Entry.audios),
+            )
+        )
+    ).scalars().all()
+    for entry in entries:
+        keys.extend(p.storage_key for p in entry.photos)
+        keys.extend(v.storage_key for v in entry.videos)
+        keys.extend(a.storage_key for a in entry.audios)
+
+    book_rows = await session.execute(
+        select(Book.id, Book.pdf_r2_key, Book.cover_r2_key).where(Book.user_id == user.id)
+    )
+    book_ids: list[UUID] = []
+    for book_id, pdf_key, cover_key in book_rows.all():
+        book_ids.append(book_id)
+        keys.extend(k for k in (pdf_key, cover_key) if k)
+
+    if book_ids:
+        asset_rows = await session.execute(
+            select(GeneratedAsset.r2_key).where(GeneratedAsset.book_id.in_(book_ids))
+        )
+        keys.extend(k for (k,) in asset_rows.all() if k)
+
+    keys.append(user.face_photo_url or "")
+    return [k for k in keys if _is_bucket_key(k)]
+
+
 async def delete_user(session: AsyncSession, *, user: User) -> None:
-    """Delete the user record. Cascade FKs handle entries/photos/etc."""
-    await session.execute(delete(User).where(User.id == user.id))
+    """Delete the user and all their data, including R2 storage objects.
+
+    DB rows cascade from the User delete; R2 objects have no DB FK so they
+    must be collected first and deleted after the commit. A storage cleanup
+    failure is logged but never blocks account deletion (objects can be swept
+    later); the user's right to deletion takes precedence.
+    """
+    storage_keys = await _collect_user_storage_keys(session, user)
+    user_id = user.id
+    await session.execute(delete(User).where(User.id == user_id))
     await session.commit()
+
+    if storage_keys:
+        try:
+            get_r2_storage().delete_objects(storage_keys)
+        except Exception as exc:
+            logger.warning(
+                "user r2 cleanup failed",
+                user_id=str(user_id),
+                object_count=len(storage_keys),
+                error=str(exc),
+            )
 
 
 async def export_user_data(session: AsyncSession, *, user_id: UUID) -> dict:

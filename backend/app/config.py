@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     openai_model_whisper: str = "whisper-1"
     openai_model_image: str = "gpt-image-2"
     openai_image_size: str = "1024x1024"
-    book_generation_ai_enabled: bool = False
+    book_generation_ai_enabled: bool = True
     book_generation_openai_timeout_seconds: float = 20.0
     book_generation_openai_max_retries: int = 0
 
@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Clerk
     clerk_secret_key: str = ""          # sk_test_... — for REST API calls
     clerk_jwks_url: str = ""            # https://clerk.yourdomain.com/.well-known/jwks.json
+    clerk_issuer: str = ""              # https://clerk.yourdomain.com — checked vs token `iss`
+    clerk_audience: str = ""            # optional; only enforced when set
+    # Authorized parties (`azp`) — Clerk frontend origins allowed to mint tokens.
+    clerk_authorized_parties: list[str] = Field(default_factory=list)
+    clerk_jwks_cache_seconds: int = 600  # refresh JWKS at most this often (key rotation)
 
     r2_account_id: str = ""
     r2_access_key_id: str = ""
@@ -52,7 +57,15 @@ class Settings(BaseSettings):
     revenuecat_webhook_secret: str = ""
 
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # Explicit web origins. Empty = no browser CORS (mobile-only). The "*"
+    # wildcard is rejected in production (see app.main._resolve_cors_origins).
+    cors_origins: list[str] = Field(default_factory=list)
+
+    # Rate limiting. Default "memory://" keeps single-process dev/test working
+    # with no external dependency; set to the Redis URL in production so limits
+    # are shared across worker processes.
+    rate_limit_enabled: bool = True
+    rate_limit_storage_uri: str = "memory://"
 
 
 @lru_cache

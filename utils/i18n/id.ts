@@ -110,6 +110,11 @@ export const id: Record<TranslationKey, string> = {
   'editor.voiceNote': 'Voice note',
   'editor.video': 'Video',
   'editor.uploading': 'mengunggah…',
+  'editor.transcribing': 'mentranskrip…',
+  'editor.transcribeToJournal': 'Transkrip ke jurnal',
+  'editor.transcribePremium': 'Transkrip · Premium',
+  'editor.error.transcriptionFailed': 'Transkripsi audio gagal',
+  'editor.error.transcriptionPremium': 'Transkripsi audio adalah fitur Premium.',
 
   // Modal header
   'modal.discardTitle': 'Buang perubahan?',
@@ -303,7 +308,7 @@ export const id: Record<TranslationKey, string> = {
   // Privacy screen
   'privacy.title': 'Privasi',
   'privacy.body':
-    'Entri jurnalmu disimpan secara privat dan hanya digunakan untuk merangkai refleksi harian. Kami tidak pernah membagikan isi jurnalmu ke pihak ketiga. Voice note tidak ditranskripsikan secara default; transkripsi hanya dipakai saat kamu mengaktifkannya untuk preview buku.',
+    'Entri jurnalmu disimpan secara privat dan hanya digunakan untuk merangkai refleksi harian. Kami tidak pernah membagikan isi jurnalmu ke pihak ketiga. Voice note tidak ditranskripsikan secara default; transkripsi hanya dipakai saat kamu mengaktifkannya untuk penulisan entri Premium atau preview buku.',
   'privacy.deleteAccount': 'Hapus akun',
   'privacy.deleteTitle': 'Hapus akunmu?',
   'privacy.deleteMessage':

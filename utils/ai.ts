@@ -7,6 +7,12 @@ type ImageJobStatus = {
   error: string | null;
 };
 
+type AudioTranscriptionJobStatus = {
+  status: 'pending' | 'processing' | 'done' | 'failed';
+  transcript: string | null;
+  error: string | null;
+};
+
 export type GeneratedImage = {
   storage_key: string;
   public_url: string;
@@ -70,6 +76,13 @@ export async function startImageGen(
   return data.job_id;
 }
 
+export async function startAudioTranscription(storageKey: string): Promise<string> {
+  const { data } = await api.post<{ job_id: string }>('/ai/audio-transcriptions', {
+    storage_key: storageKey,
+  });
+  return data.job_id;
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -99,4 +112,32 @@ export async function pollImageJob(
   }
 
   throw new Error('Image generation timed out.');
+}
+
+export async function pollAudioTranscriptionJob(
+  jobId: string,
+  intervalMs = DEFAULT_INTERVAL_MS,
+  timeoutMs = 180_000,
+): Promise<string> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const { data } = await api.get<AudioTranscriptionJobStatus>(
+      `/ai/audio-transcriptions/${jobId}`,
+    );
+
+    if (data.status === 'done') {
+      const transcript = data.transcript?.trim();
+      if (!transcript) throw new Error('Transcription completed without text.');
+      return transcript;
+    }
+
+    if (data.status === 'failed') {
+      throw new Error(data.error || 'Audio transcription failed.');
+    }
+
+    await wait(intervalMs);
+  }
+
+  throw new Error('Audio transcription timed out.');
 }
