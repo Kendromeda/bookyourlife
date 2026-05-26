@@ -1452,7 +1452,8 @@ export default function OnboardingScreen() {
           asset.mimeType ?? 'image/jpeg',
           'face-photo',
         );
-        setPhotoKey(uploaded.public_url);
+        setPhotos((prev) => prev.map((p, idx) => (idx === i ? uploaded.public_url : p)));
+        setPhotoKey(uploaded.storage_key);
       } catch (e: any) {
         setError(e?.message ?? t('editor.error.photoUploadFailed'));
         setPhotos((prev) => prev.map((p, idx) => (idx === i ? null : p)));

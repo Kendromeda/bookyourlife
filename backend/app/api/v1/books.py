@@ -1,13 +1,17 @@
+import asyncio
+import json
 from datetime import UTC, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.db import session_scope
 from app.deps import CurrentUser, SessionDep
-from app.models.book import Book, BookPlan
+from app.models.book import Book, BookPlan, GeneratedAsset
 from app.rate_limit import limiter
 from app.schemas.book import (
     BookGenerateRequest,
@@ -19,11 +23,13 @@ from app.schemas.book import (
     BookPreviewCreateResponse,
     BookPreviewRequest,
     BookPreviewResponse,
+    BookRegenerateAssetsRequest,
+    BookRegenerateAssetsResponse,
     BookTweaksUpdate,
 )
 from app.services.storage.r2 import get_r2_storage, media_read_url
 from app.tasks.book_gen import generate_book
-from app.tasks.book_pipeline import generate_book_pipeline
+from app.tasks.book_pipeline import generate_book_pipeline, regenerate_book_assets
 
 router = APIRouter()
 
@@ -432,3 +438,182 @@ async def cancel_generated_book(
     await session.commit()
     await session.refresh(book)
     return await _generation_detail(book, session)
+
+
+@router.post(
+    "/{book_id}/regenerate-assets",
+    response_model=BookRegenerateAssetsResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit("5/minute")
+async def regenerate_book_assets_endpoint(
+    request: Request,
+    book_id: UUID,
+    payload: BookRegenerateAssetsRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> BookRegenerateAssetsResponse:
+    """Re-run S5 image generation and continue through finalize+notify.
+
+    Useful when a partial run completed with paper-texture placeholders
+    (e.g. transient OpenAI/Replicate failure) and the user wants the
+    artwork retried without rebuilding the chapter plan from scratch.
+    """
+    book = await _load_generation_book(book_id, user.id, session)
+    if book.status == "processing":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Book is already being generated; cancel before regenerating assets.",
+        )
+    if book.status in {"queued", "cancelled"}:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Regenerate is only available after the initial generation finishes or fails.",
+        )
+
+    # Current regeneration task rebuilds the whole S5 image set so chapter
+    # cover links stay consistent after it deletes and recreates assets.
+    # Reject a partial request until the task supports selective retries.
+    target_ids = payload.asset_ids
+    if target_ids:
+        owned_count = (
+            await session.execute(
+                select(func.count()).select_from(GeneratedAsset).where(
+                    GeneratedAsset.book_id == book.id,
+                    GeneratedAsset.id.in_(target_ids),
+                )
+            )
+        ).scalar_one()
+        if owned_count != len(set(target_ids)):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "One or more assets were not found")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Partial asset regeneration is not supported yet; omit asset_ids to retry all.",
+        )
+
+    requeued = (
+        await session.execute(
+            select(func.count()).select_from(GeneratedAsset).where(
+                GeneratedAsset.book_id == book.id,
+                GeneratedAsset.status.in_(["failed", "failed_fallback"]),
+            )
+        )
+    ).scalar_one()
+
+    book.status = "processing"
+    book.current_stage = "images"
+    book.error_message = None
+    book.progress = min(book.progress, 55)
+    await session.commit()
+    await session.refresh(book)
+
+    try:
+        regenerate_book_assets.delay(str(book.id), [str(asset_id) for asset_id in target_ids])
+    except Exception as exc:
+        book.status = "failed"
+        book.error_message = f"Book queue unavailable: {exc}"
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Book queue unavailable",
+        ) from exc
+
+    return BookRegenerateAssetsResponse(
+        book_id=book.id,
+        requeued=requeued,
+        status=book.status,  # type: ignore[arg-type]
+        current_stage=book.current_stage,
+    )
+
+
+# SSE poll cadence — DB lookup is cheap and the pipeline updates every
+# few seconds at most, so 1 s feels live without hammering Postgres.
+_SSE_POLL_INTERVAL_SECONDS = 1.0
+_SSE_MAX_DURATION_SECONDS = 600.0
+_SSE_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+
+
+@router.get("/{book_id}/events")
+async def stream_generated_book_events(
+    book_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+) -> StreamingResponse:
+    """Server-Sent Events stream of book generation state.
+
+    Emits one `data: {json}\\n\\n` frame whenever status/stage/progress
+    changes. Closes on terminal state or after _SSE_MAX_DURATION_SECONDS
+    (clients should auto-reconnect via the EventSource API).
+    """
+    # Confirm ownership before opening the long-lived stream — otherwise
+    # the SessionDep is closed once the generator starts iterating.
+    await _load_generation_book(book_id, user.id, session)
+
+    user_id = user.id
+
+    async def event_source():
+        last_snapshot: tuple | None = None
+        deadline = asyncio.get_running_loop().time() + _SSE_MAX_DURATION_SECONDS
+        # Initial frame so the client gets state immediately, not after
+        # the first poll.
+        async for frame in _emit_snapshot(book_id, user_id, last_snapshot):
+            last_snapshot = frame.snapshot
+            yield frame.payload
+            if frame.terminal:
+                return
+        while asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(_SSE_POLL_INTERVAL_SECONDS)
+            async for frame in _emit_snapshot(book_id, user_id, last_snapshot):
+                last_snapshot = frame.snapshot
+                yield frame.payload
+                if frame.terminal:
+                    return
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+        },
+    )
+
+
+class _SseFrame:
+    """Tiny holder so the generator can return both a payload string and
+    state needed to decide whether to keep streaming."""
+
+    __slots__ = ("payload", "snapshot", "terminal")
+
+    def __init__(self, payload: str, snapshot: tuple, terminal: bool) -> None:
+        self.payload = payload
+        self.snapshot = snapshot
+        self.terminal = terminal
+
+
+async def _emit_snapshot(book_id: UUID, user_id: UUID, last_snapshot: tuple | None):
+    async with session_scope() as session:
+        book = (
+            await session.execute(
+                select(Book).where(
+                    Book.id == book_id,
+                    Book.user_id == user_id,
+                    _generation_filter(),
+                )
+            )
+        ).scalar_one_or_none()
+        if book is None:
+            payload = json.dumps({"error": "not_found"})
+            yield _SseFrame(f"event: error\ndata: {payload}\n\n", (), terminal=True)
+            return
+
+        plan = (
+            await session.execute(select(BookPlan).where(BookPlan.book_id == book.id))
+        ).scalar_one_or_none()
+        detail = _serialize_generation(book, plan)
+        snapshot = (detail.status, detail.current_stage, detail.progress, detail.error_message)
+        if snapshot == last_snapshot:
+            return
+        payload = detail.model_dump_json()
+        terminal = detail.status in _SSE_TERMINAL_STATUSES
+        yield _SseFrame(f"data: {payload}\n\n", snapshot, terminal=terminal)

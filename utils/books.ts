@@ -99,8 +99,17 @@ export type CreateGeneratedBookInput = {
   cover_mode: BookCoverMode;
   include_voice_transcripts: boolean;
   illustrated_required: boolean;
+  /** Opt-in: run user photos through Flux img2img with the chosen style. */
+  style_transfer_photos?: boolean;
   custom_title?: string | null;
   dedication?: string | null;
+};
+
+export type RegenerateBookAssetsResponse = {
+  book_id: string;
+  requeued: number;
+  status: BookGenerationStatus;
+  current_stage: string | null;
 };
 
 export type CreateGeneratedBookResponse = {
@@ -150,6 +159,17 @@ export async function fetchGeneratedBooks(
 
 export async function cancelGeneratedBook(bookId: string): Promise<GeneratedBook> {
   const { data } = await api.post<GeneratedBook>(`/books/${bookId}/cancel`);
+  return data;
+}
+
+export async function regenerateBookAssets(
+  bookId: string,
+  assetIds: string[] = [],
+): Promise<RegenerateBookAssetsResponse> {
+  const { data } = await api.post<RegenerateBookAssetsResponse>(
+    `/books/${bookId}/regenerate-assets`,
+    { asset_ids: assetIds },
+  );
   return data;
 }
 

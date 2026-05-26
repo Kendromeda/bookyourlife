@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import re
@@ -32,6 +33,7 @@ from app.models.book import (
     GeneratedAsset,
 )
 from app.models.entry import Entry
+from app.services.image.replicate import replicate_configured, style_transfer_photo
 from app.services.push.fcm import FcmService
 from app.services.storage.r2 import get_r2_storage
 from app.tasks.async_runner import run_async
@@ -118,11 +120,63 @@ class _AssetRequest:
     alt_text: str
     source_storage_key: str | None = None
     requires_generation: bool = True
+    # When True, the asset must come from Replicate Flux img2img (photo
+    # style transfer). When False, text-to-image via OpenAI is used.
+    img2img: bool = False
+
+    @property
+    def prompt_key(self) -> str:
+        # Stable key for prompt-override lookup (LLM-composed prompts).
+        # `cover` has no ref_id, so anchor it on the book itself.
+        ref = str(self.ref_id) if self.ref_id else "_self"
+        return f"{self.asset_type}:{ref}"
 
 
 @celery_app.task(name="app.tasks.book_pipeline.generate_book_pipeline")
 def generate_book_pipeline(book_id: str) -> None:
     run_async(_run_pipeline(UUID(book_id)))
+
+
+@celery_app.task(name="app.tasks.book_pipeline.regenerate_book_assets")
+def regenerate_book_assets(book_id: str, asset_ids: list[str] | None = None) -> None:
+    """Retry S5 image generation (full or partial), then re-run S6/S7/S8.
+
+    `asset_ids` is a hint about which generated_assets rows the caller wants
+    retried — empty list / None means "every asset still in failed state."
+    """
+    run_async(_run_regeneration(UUID(book_id), [UUID(a) for a in asset_ids or []]))
+
+
+async def _run_regeneration(book_id: UUID, asset_ids: list[UUID]) -> None:
+    # Mark target assets as pending so _images_stage's `delete()` of the
+    # whole asset set is acceptable (we re-run everything). Keeping the
+    # data simple: this task always reruns S5 then continues through S8.
+    try:
+        async with session_scope() as session:
+            book = (
+                await session.execute(select(Book).where(Book.id == book_id))
+            ).scalar_one_or_none()
+            if book is None:
+                return
+            if book.status == "cancelled":
+                return
+            book.status = "processing"
+            book.error_message = None
+            book.current_stage = "images"
+        for stage, handler in [
+            ("images", _images_stage),
+            ("render", _render_stage),
+            ("finalize", _finalize_stage),
+            ("notify", _notify_stage),
+        ]:
+            await _run_stage(book_id, stage, handler)
+    except _BookCancelled:
+        logger.info("book regeneration cancelled", book_id=str(book_id))
+    except _BookGenerationError as exc:
+        await _mark_book_failed(book_id, "images", str(exc))
+    except Exception as exc:
+        logger.warning("book regeneration failed", book_id=str(book_id), error=str(exc))
+        await _mark_book_failed(book_id, "images", str(exc))
 
 
 async def _run_pipeline(book_id: UUID) -> None:
@@ -316,9 +370,23 @@ async def _images_stage(book_id: UUID) -> dict:
         )
 
     requests = _image_asset_requests(book, plan, chapters, entries)
-    generated_assets = [
-        _build_generated_asset(book, request, settings) for request in requests
-    ]
+    prompt_overrides = await _compose_image_prompts(book, plan, chapters, entries, requests)
+
+    # S5 fan-out — bound concurrency so we don't trip OpenAI/Replicate rate
+    # limits. Each task runs the blocking provider client in a worker thread.
+    semaphore = asyncio.Semaphore(max(1, settings.book_generation_image_concurrency))
+
+    async def build(request: _AssetRequest) -> GeneratedAsset:
+        async with semaphore:
+            return await anyio.to_thread.run_sync(
+                _build_generated_asset,
+                book,
+                request,
+                settings,
+                prompt_overrides.get(request.prompt_key),
+            )
+
+    generated_assets = list(await asyncio.gather(*(build(r) for r in requests)))
 
     _raise_if_required_illustrations_failed(book, generated_assets)
 
@@ -357,9 +425,151 @@ async def _images_stage(book_id: UUID) -> dict:
             1 for asset in generated_assets if asset.asset_type == "chapter_opener"
         ),
         "entry_images": sum(1 for asset in generated_assets if asset.asset_type == "entry_image"),
+        "photo_transforms": sum(
+            1 for asset in generated_assets if asset.asset_type == "photo_transform"
+        ),
         "generated": sum(1 for asset in generated_assets if asset.status == "done"),
         "fallback": sum(1 for asset in generated_assets if asset.status == "failed_fallback"),
+        "llm_prompted": len(prompt_overrides),
     }
+
+
+async def _compose_image_prompts(
+    book: Book,
+    plan: BookPlan | None,
+    chapters: list[BookChapter],
+    entries: list[Entry],
+    requests: list[_AssetRequest],
+) -> dict[str, str]:
+    """LLM stage 6a/7a/8a — compose tight image prompts in one batch.
+
+    Returns a {prompt_key: prompt_text} override map. Missing keys fall
+    back to the Python-built prompt stored on `_AssetRequest.prompt`.
+    Photo-transform requests skip composition because the style prompt
+    is fixed in `services.image.replicate.STYLE_PROMPTS`.
+    """
+    settings = get_settings()
+    if (
+        not settings.book_generation_ai_enabled
+        or not settings.openai_api_key
+        or not settings.book_generation_use_llm_image_prompts
+    ):
+        return {}
+
+    style = str((book.config or {}).get("style_preset") or book.style or "watercolor")
+    image_requests = _image_prompt_requests(book, plan, chapters, entries, requests)
+    if not image_requests:
+        return {}
+
+    try:
+        prompt = prompt_env.get_template("book_image_prompts.j2").render(
+            style_preset=style,
+            style_modifiers=STYLE_PROMPTS.get(style, STYLE_PROMPTS["watercolor"]),
+            requests_json=json.dumps(image_requests, ensure_ascii=False),
+        )
+        client = _generation_openai_client(settings)
+        response = await anyio.to_thread.run_sync(
+            lambda: client.chat.completions.create(
+                model=settings.openai_model_narrative,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Compose terse text-to-image prompts. Return JSON only.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=2_400,
+                timeout=settings.book_generation_openai_timeout_seconds,
+            )
+        )
+        content = response.choices[0].message.content if response.choices else None
+        if not content:
+            return {}
+        payload = json.loads(content)
+    except Exception as exc:
+        logger.warning(
+            "book image prompt composition fallback",
+            book_id=str(book.id),
+            error=str(exc),
+        )
+        return {}
+
+    overrides: dict[str, str] = {}
+    for item in payload.get("images", []) or []:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("id")
+        text = item.get("prompt")
+        if isinstance(key, str) and isinstance(text, str) and text.strip():
+            overrides[key] = text.strip()
+    return overrides
+
+
+def _image_prompt_requests(
+    book: Book,
+    plan: BookPlan | None,
+    chapters: list[BookChapter],
+    entries: list[Entry],
+    requests: list[_AssetRequest],
+) -> list[dict]:
+    chapter_by_id = {chapter.id: chapter for chapter in chapters}
+    entry_by_id = {entry.id: entry for entry in entries}
+    image_requests = []
+    for request in requests:
+        if not request.requires_generation or request.img2img:
+            continue
+        context = _image_prompt_context(book, plan, chapter_by_id, entry_by_id, request)
+        if context:
+            image_requests.append({"id": request.prompt_key, **context})
+    return image_requests
+
+
+def _image_prompt_context(
+    book: Book,
+    plan: BookPlan | None,
+    chapter_by_id: dict[UUID, BookChapter],
+    entry_by_id: dict[UUID, Entry],
+    request: _AssetRequest,
+) -> dict | None:
+    if request.asset_type == "cover":
+        return {
+            "type": "cover",
+            "title": plan.generated_title if plan else (book.title or "Untitled book"),
+            "theme_summary": plan.theme_summary if plan else "",
+            "dominant_mood": (plan.dominant_mood if plan else None) or "reflective",
+        }
+    if request.asset_type == "chapter_opener":
+        chapter = chapter_by_id.get(request.ref_id) if request.ref_id else None
+        return {
+            "type": "chapter_opener",
+            "chapter_title": chapter.title if chapter else "",
+            "chapter_theme": (chapter.theme if chapter else "") or "remembered days",
+            "season_or_month": _season_hint(chapter),
+        }
+    if request.asset_type != "entry_image":
+        return None
+
+    entry = entry_by_id.get(request.ref_id) if request.ref_id else None
+    return {
+        "type": "entry_image",
+        "entry_date": entry.written_at.date().isoformat() if entry else "",
+        "entry_summary": re.sub(r"\s+", " ", entry.body).strip()[:480] if entry else "",
+        "entry_mood": entry.emotion_tags[0] if entry and entry.emotion_tags else None,
+    }
+
+
+def _season_hint(chapter: BookChapter | None) -> str:
+    if chapter is None or chapter.date_range_start is None:
+        return ""
+    month = chapter.date_range_start.month
+    if month in (12, 1, 2):
+        return "winter"
+    if month in (3, 4, 5):
+        return "spring"
+    if month in (6, 7, 8):
+        return "summer"
+    return "autumn"
 
 
 async def _render_stage(book_id: UUID) -> dict:
@@ -955,6 +1165,9 @@ def _image_asset_requests(
     style = str(config.get("style_preset") or book.style or "watercolor")
     title = book.title or (plan.generated_title if plan else None) or "Untitled Book"
     best_photo_key = _best_photo_storage_key(entries)
+    # Opt-in style transfer of user photos (plan §5 Prompt 9). Hidden
+    # behind a config flag so the default book stays cheap.
+    style_transfer_photos = bool(config.get("style_transfer_photos"))
 
     requests: list[_AssetRequest] = []
     if cover_mode == "best_photo" or mode == "photo_only":
@@ -1003,16 +1216,34 @@ def _image_asset_requests(
             )
         )
     for entry in entries:
-        if entry.photos:
-            continue
-        requests.append(
-            _AssetRequest(
-                asset_type="entry_image",
-                ref_id=entry.id,
-                prompt=_entry_image_prompt(entry, style),
-                alt_text=f"Margin illustration for {entry.written_at.date().isoformat()}",
+        if not entry.photos:
+            requests.append(
+                _AssetRequest(
+                    asset_type="entry_image",
+                    ref_id=entry.id,
+                    prompt=_entry_image_prompt(entry, style),
+                    alt_text=f"Margin illustration for {entry.written_at.date().isoformat()}",
+                )
             )
-        )
+            continue
+        if not style_transfer_photos:
+            continue
+        # Opt-in photo style transfer (img2img). One request per photo —
+        # fallback chain inside _build_generated_asset uses the original
+        # photo if Replicate is unconfigured or the call fails.
+        for photo in entry.photos:
+            if not photo.storage_key:
+                continue
+            requests.append(
+                _AssetRequest(
+                    asset_type="photo_transform",
+                    ref_id=photo.id,
+                    prompt=f"Style transfer ({style}) of user photo {photo.id}",
+                    alt_text=f"Stylized photo from {entry.written_at.date().isoformat()}",
+                    source_storage_key=photo.storage_key,
+                    img2img=True,
+                )
+            )
     return requests
 
 
@@ -1020,7 +1251,18 @@ def _build_generated_asset(
     book: Book,
     request: _AssetRequest,
     settings,  # type: ignore[no-untyped-def]
+    prompt_override: str | None = None,
 ) -> GeneratedAsset:
+    """Synchronous per-asset worker. Called from a thread by _images_stage.
+
+    Branches:
+    1. requires_generation=False -> straight passthrough (best-photo cover,
+       photo-only placeholder).
+    2. img2img=True -> Replicate Flux photo style transfer. Fallback to
+       the original user photo if Replicate fails / is unconfigured.
+    3. otherwise -> OpenAI text-to-image with the prompt (LLM-composed
+       override if available, else the Python-built fallback prompt).
+    """
     ai_enabled = bool(settings.book_generation_ai_enabled and settings.openai_api_key)
     if request.source_storage_key and not request.requires_generation:
         return GeneratedAsset(
@@ -1036,18 +1278,24 @@ def _build_generated_asset(
             fallback_strategy="best_photo_cover",
         )
 
-    if not request.requires_generation or not ai_enabled:
-        reason = "ai_disabled" if not ai_enabled else "paper_texture_placeholder"
-        return _fallback_asset(book, request, reason)
+    if not request.requires_generation:
+        return _fallback_asset(book, request, "paper_texture_placeholder")
 
+    if request.img2img:
+        return _build_photo_transform_asset(book, request, settings)
+
+    if not ai_enabled:
+        return _fallback_asset(book, request, "ai_disabled")
+
+    final_prompt = prompt_override or request.prompt
     try:
-        image_bytes = _generate_openai_image_bytes(request.prompt, settings)
+        image_bytes = _generate_openai_image_bytes(final_prompt, settings)
         storage_key = _store_generated_image(book, request, image_bytes, settings)
         return GeneratedAsset(
             book_id=book.id,
             asset_type=request.asset_type,
             ref_id=request.ref_id,
-            prompt=request.prompt,
+            prompt=final_prompt,
             provider="openai",
             model=settings.openai_model_image,
             r2_key=storage_key,
@@ -1067,6 +1315,70 @@ def _build_generated_asset(
         fallback.error = str(exc)[:1000]
         fallback.attempts = 1
         return fallback
+
+
+def _build_photo_transform_asset(
+    book: Book,
+    request: _AssetRequest,
+    settings,  # type: ignore[no-untyped-def]
+) -> GeneratedAsset:
+    style = str((book.config or {}).get("style_preset") or book.style or "watercolor")
+    source_key = request.source_storage_key
+    if not source_key:
+        return _fallback_asset(book, request, "missing_source_photo")
+    if not replicate_configured():
+        # Plan §8 photo_transform fallback: use original photo as-is.
+        return GeneratedAsset(
+            book_id=book.id,
+            asset_type=request.asset_type,
+            ref_id=request.ref_id,
+            prompt=request.prompt,
+            provider="user_photo",
+            model="original-photo",
+            r2_key=source_key,
+            status="failed_fallback",
+            attempts=0,
+            fallback_strategy="replicate_unconfigured",
+        )
+    try:
+        source_url = _storage_public_url(source_key)
+        if not source_url:
+            raise RuntimeError("Could not resolve source photo URL")
+        image_bytes = style_transfer_photo(source_url=source_url, style_preset=style)
+        storage_key = _store_generated_image(book, request, image_bytes, settings)
+        return GeneratedAsset(
+            book_id=book.id,
+            asset_type=request.asset_type,
+            ref_id=request.ref_id,
+            prompt=request.prompt,
+            provider="replicate",
+            model=settings.replicate_model_flux_img2img,
+            r2_key=storage_key,
+            status="done",
+            attempts=1,
+            fallback_strategy=None,
+        )
+    except Exception as exc:
+        logger.warning(
+            "photo transform fallback",
+            book_id=str(book.id),
+            ref_id=str(request.ref_id) if request.ref_id else None,
+            error=str(exc),
+        )
+        # Original photo as graceful fallback.
+        return GeneratedAsset(
+            book_id=book.id,
+            asset_type=request.asset_type,
+            ref_id=request.ref_id,
+            prompt=request.prompt,
+            provider="user_photo",
+            model="original-photo",
+            r2_key=source_key,
+            status="failed_fallback",
+            attempts=1,
+            fallback_strategy="used_original_photo",
+            error=str(exc)[:1000],
+        )
 
 
 def _fallback_asset(book: Book, request: _AssetRequest, strategy: str) -> GeneratedAsset:
@@ -1283,9 +1595,11 @@ async def _build_book_html(book_id: UUID) -> str:
             .all()
         )
 
-    entry_by_id = {entry.id: _entry_render_data(entry) for entry in entries}
-    enhancement_by_entry = {item.entry_id: item for item in enhancements}
     assets = _asset_render_context(generated_assets)
+    entry_by_id = {
+        entry.id: _entry_render_data(entry, assets["photo_transforms"]) for entry in entries
+    }
+    enhancement_by_entry = {item.entry_id: item for item in enhancements}
     links_by_chapter: dict[UUID, list[BookChapterEntry]] = defaultdict(list)
     for link in links:
         links_by_chapter[link.chapter_id].append(link)
@@ -1343,10 +1657,17 @@ def _asset_render_context(assets: list[GeneratedAsset]) -> dict:
         if asset.asset_type == "entry_image" and asset.ref_id
         if (render_data := _asset_render_data(asset))["url"]
     }
+    photo_transforms = {
+        asset.ref_id: render_data
+        for asset in assets
+        if asset.asset_type == "photo_transform" and asset.ref_id
+        if (render_data := _asset_render_data(asset))["url"]
+    }
     return {
         "cover": cover_asset,
         "chapter_openers": chapter_openers,
         "entry_images": entry_images,
+        "photo_transforms": photo_transforms,
     }
 
 
@@ -1364,10 +1685,18 @@ def _asset_render_data(asset: GeneratedAsset) -> dict:
     }
 
 
-def _entry_render_data(entry: Entry) -> dict:
+def _entry_render_data(
+    entry: Entry,
+    photo_transforms: dict[UUID, dict] | None = None,
+) -> dict:
+    photo_transforms = photo_transforms or {}
     photos = []
     for photo in entry.photos:
-        url = _storage_public_url(photo.storage_key)
+        # Prefer the style-transferred render when present; fall back to
+        # the original photo so the page never goes blank if Replicate
+        # was disabled / failed for this specific photo.
+        transformed = photo_transforms.get(photo.id)
+        url = transformed["url"] if transformed else _storage_public_url(photo.storage_key)
         if not url:
             continue
         photos.append(
@@ -1375,6 +1704,7 @@ def _entry_render_data(entry: Entry) -> dict:
                 "id": photo.id,
                 "url": url,
                 "position": photo.position,
+                "transformed": bool(transformed),
             }
         )
     return {

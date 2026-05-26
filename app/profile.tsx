@@ -91,7 +91,7 @@ export default function ProfileScreen() {
     setBirthdayM(b.m);
     setBirthdayD(b.d);
     setPhotoUri(me.face_photo_url);
-    setPhotoKey(me.face_photo_url);
+    setPhotoKey(null);
   }, [me]);
 
   const pickPhoto = async () => {
@@ -117,7 +117,8 @@ export default function ProfileScreen() {
         asset.mimeType ?? 'image/jpeg',
         'face-photo',
       );
-      setPhotoKey(uploaded.public_url);
+      setPhotoUri(uploaded.public_url);
+      setPhotoKey(uploaded.storage_key);
     } catch (e: any) {
       setError(e?.message ?? t('editor.error.photoUploadFailed'));
     } finally {

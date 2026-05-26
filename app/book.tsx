@@ -178,6 +178,10 @@ export default function BookScreen() {
   const [tone, setTone] = useState<BookTone>('poetic');
   const [imageMode, setImageMode] = useState<BookImageMode>('abstract');
   const [includeVoiceTranscripts, setIncludeVoiceTranscripts] = useState(false);
+  const [styleTransferPhotos, setStyleTransferPhotos] = useState(false);
+  // Personal dedication printed on the first interior page (max 1000
+  // chars enforced by the backend BookGenerateRequest schema).
+  const [dedication, setDedication] = useState('');
   const [bookId, setBookId] = useState<string | null>(null);
   const [generatedBookId, setGeneratedBookId] = useState<string | null>(null);
   const [pdfOpenError, setPdfOpenError] = useState<string | null>(null);
@@ -260,14 +264,19 @@ export default function BookScreen() {
       }
       const date_start = source?.date_start ?? ymd(range.start!);
       const date_end = source?.date_end ?? ymd(addDays(range.end!, -1));
+      const generationMode = imageMode === 'none' ? 'photo_only' : 'illustrated';
+      const trimmedDedication = dedication.trim();
       return createGeneratedBook({
         date_start,
         date_end,
-        mode: imageMode === 'none' ? 'photo_only' : 'illustrated',
+        mode: generationMode,
         style_preset: STYLE_BY_TONE[previewTone],
         cover_mode: imageMode === 'photo_inspired' ? 'best_photo' : 'ai_mood',
         include_voice_transcripts: includeVoiceTranscripts,
         illustrated_required: false,
+        // photo_only mode rejects style_transfer_photos server-side.
+        style_transfer_photos: generationMode === 'photo_only' ? false : styleTransferPhotos,
+        dedication: trimmedDedication.length > 0 ? trimmedDedication : null,
       });
     },
     onSuccess: (result) => {
@@ -478,6 +487,39 @@ export default function BookScreen() {
               </View>
               <Switch value={includeVoiceTranscripts} onValueChange={setIncludeVoiceTranscripts} />
             </View>
+
+            <View style={[styles.toggleRow, { borderColor: c.border, backgroundColor: c.surface }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleTitle, { color: c.text }]}>
+                  Style-transfer my photos
+                </Text>
+                <Text style={[styles.toggleSub, { color: c.muted }]}>
+                  Re-paint each photo in the chosen style. Adds time and cost.
+                </Text>
+              </View>
+              <Switch
+                value={imageMode === 'none' ? false : styleTransferPhotos}
+                disabled={imageMode === 'none'}
+                onValueChange={setStyleTransferPhotos}
+              />
+            </View>
+
+            <Text style={[styles.section, { color: c.text }]}>Dedication (optional)</Text>
+            <TextInput
+              value={dedication}
+              onChangeText={setDedication}
+              placeholder="For everyone who waited for me to write this down."
+              placeholderTextColor={c.muted}
+              multiline
+              maxLength={1000}
+              style={[
+                styles.dedicationInput,
+                { borderColor: c.border, color: c.text, backgroundColor: c.surface },
+              ]}
+            />
+            <Text style={[styles.helperText, { color: c.muted }]}>
+              {dedication.length}/1000 — printed on the first interior page.
+            </Text>
 
             <TouchableOpacity
               style={[
@@ -1002,6 +1044,17 @@ const styles = StyleSheet.create({
   },
   toggleTitle: { fontSize: 15, fontWeight: '700' },
   toggleSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  dedicationInput: {
+    borderWidth: 1,
+    borderRadius: Radii.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    minHeight: 90,
+    textAlignVertical: 'top',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  helperText: { fontSize: 11, marginTop: 4 },
   cta: {
     marginTop: Spacing.xl,
     minHeight: 52,

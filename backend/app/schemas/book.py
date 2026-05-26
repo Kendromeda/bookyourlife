@@ -106,6 +106,10 @@ class BookGenerateRequest(BaseModel):
     cover_mode: BookCoverMode = "ai_mood"
     include_voice_transcripts: bool = True
     illustrated_required: bool = False
+    # Opt-in: run user photos through Flux img2img with the chosen style
+    # preset. Off by default because it adds ~$0.04 per photo and ~20 s
+    # latency per image to the pipeline.
+    style_transfer_photos: bool = False
     custom_title: str | None = Field(default=None, max_length=120)
     dedication: str | None = Field(default=None, max_length=1_000)
 
@@ -115,6 +119,8 @@ class BookGenerateRequest(BaseModel):
             raise ValueError("date_end must be on or after date_start")
         if self.illustrated_required and self.mode == "photo_only":
             raise ValueError("illustrated_required requires illustrated or mixed mode")
+        if self.style_transfer_photos and self.mode == "photo_only":
+            raise ValueError("style_transfer_photos requires illustrated or mixed mode")
         return self
 
 
@@ -139,3 +145,33 @@ class BookGenerationDetail(BaseModel):
 
 class BookGenerationListResponse(BaseModel):
     items: list[BookGenerationDetail] = Field(default_factory=list)
+
+
+class BookRegenerateAssetsRequest(BaseModel):
+    """Re-run S5 image generation.
+
+    Omit `asset_ids` to retry every asset currently in failed /
+    failed_fallback state. Partial retries are reserved for a future
+    pipeline path and currently return 400.
+    """
+
+    asset_ids: list[UUID] = Field(default_factory=list)
+
+
+class BookRegenerateAssetsResponse(BaseModel):
+    book_id: UUID
+    requeued: int
+    status: BookGenerationStatus
+    current_stage: str | None = None
+
+
+class BookStageEvent(BaseModel):
+    """One event emitted by the SSE stream during book generation."""
+
+    book_id: UUID
+    status: BookGenerationStatus
+    progress: int
+    current_stage: str | None = None
+    error_message: str | None = None
+    pdf_url: str | None = None
+    cover_url: str | None = None

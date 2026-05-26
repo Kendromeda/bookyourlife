@@ -30,9 +30,20 @@ class Settings(BaseSettings):
     book_generation_ai_enabled: bool = True
     book_generation_openai_timeout_seconds: float = 20.0
     book_generation_openai_max_retries: int = 0
+    # Parallel cap for S5 image fan-out — respects OpenAI/Replicate RPM tiers
+    # without serializing 40+ images.
+    book_generation_image_concurrency: int = 6
+    # Two-stage prompt composition: LLM first writes the image prompt, then
+    # text-to-image API consumes it. Disable to fall back to the static
+    # Python-built prompts.
+    book_generation_use_llm_image_prompts: bool = True
 
     replicate_api_token: str = ""
     replicate_model_flux: str = "black-forest-labs/flux-1.1-pro"
+    # img2img model for user-photo style transfer (Prompt 9). Flux dev/schnell
+    # supports the `image` + `prompt_strength` inputs; Pro 1.1 does not.
+    replicate_model_flux_img2img: str = "black-forest-labs/flux-dev"
+    replicate_request_timeout_seconds: float = 240.0
 
     # Clerk
     clerk_secret_key: str = ""          # sk_test_... — for REST API calls
