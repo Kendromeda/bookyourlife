@@ -27,12 +27,25 @@ class Settings(BaseSettings):
     openai_model_whisper: str = "whisper-1"
     openai_model_image: str = "gpt-image-2"
     openai_image_size: str = "1024x1024"
+    # Quality tiers (gpt-image-2). The cover is the hero, so it earns `high`;
+    # interior illustrations use `medium`, which is ~4x cheaper per image with
+    # no visible loss at A5 print size. Without these, the API defaults to
+    # `auto` (often `high`) on every image — the main cost overrun.
+    openai_image_quality_cover: str = "high"
+    openai_image_quality_interior: str = "medium"
     book_generation_ai_enabled: bool = True
     book_generation_openai_timeout_seconds: float = 20.0
     book_generation_openai_max_retries: int = 0
     # Parallel cap for S5 image fan-out — respects OpenAI/Replicate RPM tiers
     # without serializing 40+ images.
     book_generation_image_concurrency: int = 6
+    # AI image budget is tied to book STRUCTURE (chapters), never to entry
+    # count, so a 200-entry book generates as many images as a 30-entry one.
+    # Chapter openers are capped; entry illustrations are limited to the
+    # highest-value text-only entries (~1 per chapter). Everything else renders
+    # as plain Diary Style text.
+    book_generation_max_chapter_openers: int = 12
+    book_generation_max_entry_images: int = 12
     # Two-stage prompt composition: LLM first writes the image prompt, then
     # text-to-image API consumes it. Disable to fall back to the static
     # Python-built prompts.

@@ -13,7 +13,7 @@ from app.api.v1 import books as books_api
 from app.db import get_session
 from app.deps import get_current_user
 from app.main import create_app
-from app.models.book import Book, BookPlan
+from app.models.book import Book, BookChapter, BookPlan
 from app.models.entry import Entry
 from app.models.user import User
 from app.schemas.book import BookGenerateRequest
@@ -24,6 +24,7 @@ from app.tasks.book_pipeline import (
     _fallback_enhancement,
     _fallback_plan,
     _image_asset_requests,
+    _image_quality_for,
     _normalize_plan_payload,
     _raise_if_required_illustrations_failed,
     _storage_public_url,
@@ -356,6 +357,93 @@ def test_photo_only_image_requests_do_not_create_chapter_openers() -> None:
 
     assert [request.asset_type for request in requests] == ["cover"]
     assert requests[0].requires_generation is False
+
+
+def _illustrated_book() -> Book:
+    return Book(
+        id=uuid4(),
+        user_id=uuid4(),
+        timeframe="custom",
+        style="watercolor",
+        status="queued",
+        config={
+            "flow": "generation",
+            "mode": "illustrated",
+            "cover_mode": "ai_mood",
+            "style_preset": "watercolor",
+        },
+    )
+
+
+def _text_only_entry(user_id: Any, day: int, word_count: int) -> Entry:
+    return Entry(
+        id=uuid4(),
+        user_id=user_id,
+        body=" ".join(["word"] * word_count),
+        written_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=day),
+        emotion_tags=[],
+        photos=[],
+        audios=[],
+    )
+
+
+def _chapter(position: int) -> BookChapter:
+    return BookChapter(id=uuid4(), book_id=uuid4(), position=position, title=f"Chapter {position}")
+
+
+def test_entry_images_cap_to_chapter_count_not_entry_volume() -> None:
+    book = _illustrated_book()
+    chapters = [_chapter(index) for index in range(1, 4)]  # 3 chapters
+    # 30 photo-less entries with strictly increasing length so the ranking is
+    # deterministic: the three longest should win the limited slots.
+    entries = [_text_only_entry(book.user_id, day, word_count=10 + day) for day in range(30)]
+
+    requests = _image_asset_requests(book, None, chapters, entries)
+
+    entry_image_refs = {r.ref_id for r in requests if r.asset_type == "entry_image"}
+    # ~1 per chapter (min(cap, chapter_count)), NOT one per no-photo entry.
+    assert len(entry_image_refs) == len(chapters)
+    longest_three = {entry.id for entry in sorted(entries, key=lambda e: len(e.body))[-3:]}
+    assert entry_image_refs == longest_three
+
+
+def test_chapter_openers_are_capped() -> None:
+    book = _illustrated_book()
+    chapters = [_chapter(index) for index in range(1, 21)]  # 20 chapters
+
+    requests = _image_asset_requests(book, None, chapters, [])
+
+    openers = [r for r in requests if r.asset_type == "chapter_opener"]
+    cap = book_pipeline.get_settings().book_generation_max_chapter_openers
+    assert len(openers) == cap
+
+
+def test_negative_image_caps_disable_extra_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    book = _illustrated_book()
+    chapters = [_chapter(index) for index in range(1, 4)]
+    entries = [_text_only_entry(book.user_id, day, word_count=20 + day) for day in range(5)]
+    monkeypatch.setattr(
+        book_pipeline,
+        "get_settings",
+        lambda: SimpleNamespace(
+            book_generation_max_chapter_openers=-1,
+            book_generation_max_entry_images=-1,
+        ),
+    )
+
+    requests = _image_asset_requests(book, None, chapters, entries)
+
+    assert [request.asset_type for request in requests] == ["cover"]
+
+
+def test_image_quality_uses_high_cover_and_medium_interior() -> None:
+    settings = SimpleNamespace(
+        openai_image_quality_cover="high",
+        openai_image_quality_interior="medium",
+    )
+    assert _image_quality_for("cover", settings) == "high"
+    assert _image_quality_for("chapter_opener", settings) == "medium"
+    assert _image_quality_for("entry_image", settings) == "medium"
 
 
 def test_illustrated_required_fails_when_most_chapter_assets_fallback() -> None:

@@ -1159,6 +1159,7 @@ def _image_asset_requests(
     chapters: list[BookChapter],
     entries: list[Entry],
 ) -> list[_AssetRequest]:
+    settings = get_settings()
     config = book.config or {}
     mode = str(config.get("mode") or "illustrated")
     cover_mode = str(config.get("cover_mode") or "ai_mood")
@@ -1206,7 +1207,10 @@ def _image_asset_requests(
     if mode not in IMAGE_GENERATION_MODES:
         return requests
 
-    for chapter in chapters:
+    # Chapter openers: one per chapter, but capped so a multi-year
+    # `part_chapter` book can't fan out an unbounded number of images.
+    chapter_opener_cap = max(0, settings.book_generation_max_chapter_openers)
+    for chapter in chapters[:chapter_opener_cap]:
         requests.append(
             _AssetRequest(
                 asset_type="chapter_opener",
@@ -1215,36 +1219,66 @@ def _image_asset_requests(
                 alt_text=f"Illustration for {chapter.title}",
             )
         )
-    for entry in entries:
-        if not entry.photos:
-            requests.append(
-                _AssetRequest(
-                    asset_type="entry_image",
-                    ref_id=entry.id,
-                    prompt=_entry_image_prompt(entry, style),
-                    alt_text=f"Margin illustration for {entry.written_at.date().isoformat()}",
-                )
+
+    # Entry illustrations: only the highest-value text-only entries (~1 per
+    # chapter), NOT one per no-photo entry. This keeps image count tied to
+    # book structure instead of entry volume. Unselected entries render as
+    # plain Diary Style text, which reads fine on its own.
+    for entry in _select_feature_entries(entries, chapters, settings):
+        requests.append(
+            _AssetRequest(
+                asset_type="entry_image",
+                ref_id=entry.id,
+                prompt=_entry_image_prompt(entry, style),
+                alt_text=f"Margin illustration for {entry.written_at.date().isoformat()}",
             )
-            continue
-        if not style_transfer_photos:
-            continue
-        # Opt-in photo style transfer (img2img). One request per photo —
-        # fallback chain inside _build_generated_asset uses the original
-        # photo if Replicate is unconfigured or the call fails.
-        for photo in entry.photos:
-            if not photo.storage_key:
-                continue
-            requests.append(
-                _AssetRequest(
-                    asset_type="photo_transform",
-                    ref_id=photo.id,
-                    prompt=f"Style transfer ({style}) of user photo {photo.id}",
-                    alt_text=f"Stylized photo from {entry.written_at.date().isoformat()}",
-                    source_storage_key=photo.storage_key,
-                    img2img=True,
+        )
+
+    if style_transfer_photos:
+        # Opt-in photo style transfer (img2img), default off. One request per
+        # photo — the fallback chain inside _build_generated_asset uses the
+        # original photo if Replicate is unconfigured or the call fails.
+        for entry in entries:
+            for photo in entry.photos:
+                if not photo.storage_key:
+                    continue
+                requests.append(
+                    _AssetRequest(
+                        asset_type="photo_transform",
+                        ref_id=photo.id,
+                        prompt=f"Style transfer ({style}) of user photo {photo.id}",
+                        alt_text=f"Stylized photo from {entry.written_at.date().isoformat()}",
+                        source_storage_key=photo.storage_key,
+                        img2img=True,
+                    )
                 )
-            )
     return requests
+
+
+def _select_feature_entries(
+    entries: list[Entry],
+    chapters: list[BookChapter],
+    settings,  # type: ignore[no-untyped-def]
+) -> list[Entry]:
+    """Pick which photo-less entries earn an AI illustration.
+
+    Bound = min(configured cap, chapter count) so the count tracks book
+    structure (~1 per chapter), never the raw entry count. Longer reflections
+    are preferred — a short note reads fine as plain text, while a long
+    text-only page benefits most from a margin illustration.
+    """
+    no_photo = [entry for entry in entries if not entry.photos]
+    if not no_photo:
+        return []
+    configured_cap = max(0, settings.book_generation_max_entry_images)
+    cap = min(configured_cap, max(len(chapters), 1))
+    ranked = sorted(
+        no_photo,
+        key=lambda entry: (_word_count(entry.body), entry.written_at),
+        reverse=True,
+    )
+    selected = ranked[:cap]
+    return sorted(selected, key=lambda entry: entry.written_at)
 
 
 def _build_generated_asset(
@@ -1289,7 +1323,8 @@ def _build_generated_asset(
 
     final_prompt = prompt_override or request.prompt
     try:
-        image_bytes = _generate_openai_image_bytes(final_prompt, settings)
+        quality = _image_quality_for(request.asset_type, settings)
+        image_bytes = _generate_openai_image_bytes(final_prompt, settings, quality)
         storage_key = _store_generated_image(book, request, image_bytes, settings)
         return GeneratedAsset(
             book_id=book.id,
@@ -1424,13 +1459,21 @@ def _asset_is_usable(asset: GeneratedAsset) -> bool:
     return asset.status == "done" and bool(asset.r2_key)
 
 
-def _generate_openai_image_bytes(prompt: str, settings) -> bytes:  # type: ignore[no-untyped-def]
+def _image_quality_for(asset_type: str, settings) -> str:  # type: ignore[no-untyped-def]
+    # The cover is the single hero image; interiors stay at the cheaper tier.
+    if asset_type == "cover":
+        return settings.openai_image_quality_cover
+    return settings.openai_image_quality_interior
+
+
+def _generate_openai_image_bytes(prompt: str, settings, quality: str) -> bytes:  # type: ignore[no-untyped-def]
     client = OpenAI(api_key=settings.openai_api_key)
     response = client.images.generate(
         model=settings.openai_model_image,
         prompt=prompt,
         n=1,
         size=settings.openai_image_size,
+        quality=quality,
         timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
     )
     if not response.data:
